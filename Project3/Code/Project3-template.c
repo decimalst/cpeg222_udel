@@ -9,6 +9,7 @@
 /* TODO:3.set up the adc*/
 /* TODO:4.program in the state logic*/
 /* TODO:5.set up change notice interrupts for keypad*/
+/* TODO:6.set up interrupt priority order */
 
 #include <p32xxxx.h>
 #include <plib.h>
@@ -87,6 +88,125 @@ void initADC (int amask)
   AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
   AD1CON1bit.ADON = 1; //turn on the ADC
 }
+
+/* This is the ISR for the keypad CN interrupts */
+/* The priority here needs to be changed */
+void __ISR(_CHANGE_NOTICE_VECTOR, ipl5) ChangeNotice_Handler(void) {
+    // 1. Disable interrupts
+    INTDisableInterrupts();
+    // 2. Debounce keys
+    while (forLoop < 1000) {
+        forLoop++;
+    }
+    forLoop = 0;
+    // 3. Decode which key was pressed
+    //First, read the inputs to clear the CN mismatch condition
+    dummy = PORTB;
+    //Now, walk through the row variables setting them equal to zero
+
+    number_of_keys = 0;
+    pressed_key = 0;
+
+
+
+    Row1 = 0;
+    Row2 = Row3 = Row4 = 1;
+
+    if (Col1 == 0) {
+        pressed_key = 0;
+        number_of_keys++;
+    }
+    if (Col2 == 0) {
+        pressed_key = 1;
+        number_of_keys++;
+    }
+    if (Col3 == 0) {
+        pressed_key = 2;
+        number_of_keys++;
+    }
+    if (Col4 == 0) {
+        pressed_key = 3;
+        number_of_keys++;
+    }
+
+    Row2 = 0;
+    Row1 = Row3 = Row4 = 1;
+
+    if (Col1 == 0) {
+        pressed_key = 4;
+        number_of_keys++;
+    }
+    if (Col2 == 0) {
+        pressed_key = 5;
+        number_of_keys++;
+    }
+    if (Col3 == 0) {
+        pressed_key = 6;
+        number_of_keys++;
+    }
+    if (Col4 == 0) {
+        pressed_key = 7;
+        number_of_keys++;
+    }
+
+    Row3 = 0;
+    Row1 = Row2 = Row4 = 1;
+
+    if (Col1 == 0) {
+        pressed_key = 8;
+        number_of_keys++;
+    }
+    if (Col2 == 0) {
+        pressed_key = 9;
+        number_of_keys++;
+    }
+    if (Col3 == 0) {
+        pressed_key = 10;
+        number_of_keys++;
+    }
+    if (Col4 == 0) {
+        pressed_key = 11;
+        number_of_keys++;
+    }
+    Row4 = 0;
+    Row1 = Row3 = Row2 = 1;
+
+    if (Col1 == 0) {
+        pressed_key = 12;
+        number_of_keys++;
+    }
+    if (Col2 == 0) {
+        pressed_key = 13;
+        number_of_keys++;
+    }
+    if (Col3 == 0) {
+        pressed_key = 14;
+        number_of_keys++;
+    }
+    if (Col4 == 0) {
+        pressed_key = 15;
+        number_of_keys++;
+    }
+
+    if (number_of_keys > 1) {
+        pressed_key = 0;
+    }
+    if (number_of_keys == 1) {
+        key_detected = pressed_key;
+        key_to_react = 1;
+    } else {
+        pressed_key = 0;
+    }
+    number_of_keys = 0;
+    Row1 = Row2 = Row3 = Row4 = 0;
+    PORTB;
+	//Clears interrupt flag
+    IFS1CLR = 0x0001;
+    // 5. Enable interrupts
+    INTEnableInterrupts();
+
+}
+
 int readADC ( int ch )
 {
   AD1CON1bits.SAMP=1; //1. start sampling
@@ -96,11 +216,16 @@ int readADC ( int ch )
 
 int mode=1;
 int passcode=0;
+unsigned int dummy;
+int key_to_react = 0;
+int pressed_key;
+int number_of_keys = 0;
+int key_detected;
 
 
 main(){
         int i;
-
+				INTDisableInterrupts();
         /* These values should be changed to reflect our timer config!*/
         // Configure Timer 5.
         T5CONbits.ON = 0; // Stop timer, clear control registers
@@ -123,6 +248,35 @@ main(){
         IPC4bits.T4IP=4; //Set priority level to 4
         IEC0bits.T4IE=1; // Enable Timer 4
         T4CONbits.ON=1; //Turn Timer  4 on.
+
+
+				//Configure Change Notice for the keypad
+				// 1. Configure CNCON, CNEN, CNPUE
+				//First, turn on Change interrupts
+				CNCON = 0x8000;
+				//Then we want CN enable on pins 2,3,4,5
+				CNEN = 0x003C;
+				//We also want to enable the pull up resistors on the board
+				CNPUE = 0x003C;
+
+				// 2. Perform a dummy read to clear mismatch
+				PORTB;
+
+				// 3. Configure IPC5, IFS1, IEC1
+				//These set the priority and subpriority to 5 and 3 respectively
+				//This priority needs to be changed
+				IPC6SET = 0x00140000;
+				IPC6SET = 0x00030000;
+				//Clear the Interrupt flag status bit
+				IFS1CLR = 0x0001;
+				//Enable Change Notice Interrupts
+				IEC1SET = 0x0001;
+
+				// 4. Enable vector interrupt
+				INTEnableSystemMultiVectoredInt();
+				//We want all the Row pins at zero so we can detect any inputs on the buttons.
+				Row1 = Row2 = Row3 = Row4 = 0;
+
         /* assign values to sampleBuffer[] */
         for (i=0; i<N; i++)
         {
