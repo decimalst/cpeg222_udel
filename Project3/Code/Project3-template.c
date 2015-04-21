@@ -24,13 +24,13 @@ PBCLK = SYSCLK /FPBDIV = 80MHz*/
 /* Input array with 16-bit complex fixed-point twiddle factors.
  this is for 16-point FFT. For other configurations, for example 32 point FFT,
  Change it to fft16c32*/
-#define fftc fft16c16
+#define fftc fft16c1024
 
 /* defines the sample frequency*/
 #define SAMPLE_FREQ 2048
 
 /* number of FFT points (must be power of 2) */
-#define N 16
+#define N 1024
 
 // 7 Segment Display pmod using the TOP JA & JB jumpers
 // Segments
@@ -82,8 +82,8 @@ int log2N = 4;
 /* int 16c is data struct defined as following:
   typedef struct
 {
-	int16 re;
-	int16 im;
+        int16 re;
+        int16 im;
 } int16c; */
 int16c sampleBuffer[N];
 
@@ -100,44 +100,45 @@ int singleSidedFFT[N];
 short freqVector[N];
 
 /* indicates the dominant frequency */
-int freq=0;
+int freq = 0;
 
 // Function definitions
 int computeFFT(int16c *sampleBuffer);
 
 //Timer 5 interrupt, we can use this for the first interrupt
-void __ISR(_TIMER_5_VECTOR, ipl4) _T5Interrupt(void)
-{
 
-	IFS0CLR = 0x100000;   // Clear Timer5 interrupt status flag (bit 20)
+void __ISR(_TIMER_5_VECTOR, ipl4) _T5Interrupt(void) {
+
+    IFS0CLR = 0x100000; // Clear Timer5 interrupt status flag (bit 20)
 }
 
 //Timer 4 interrupt, we can use this for the second interrupt
 //Note that we'll want to change either the Timer 5 ipl or Timer4 ipl
-void __ISR(_TIMER_4_VECTOR, ipl4) _T4Interrupt(void)
-{
 
-	IFS0bits.T4IF = 0;   // Clear Timer4 interrupt status flag
+void __ISR(_TIMER_4_VECTOR, ipl4) _T4Interrupt(void) {
+
+    IFS0bits.T4IF = 0; // Clear Timer4 interrupt status flag
 }
 
-void initADC (int amask)
-{
-  //ADC automatic confug
-  AD1PCFG = 0xFF7F; //All PORTB = digital but RB7 = analog
-  AD1CON1 = 0x00E0; //Automatic conversion after sampling
-  AD1CHS = 0x00070000; //Connect RB7/AN7 as CH0 input
-  AD1CSSL = 0; //No scanning required
-  AD1CON2 = 0; //Use MUXA, AVss/AVdd used as Vref+/-
-  AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
-  AD1CON1bit.ADON = 1; //turn on the ADC
+void initADC(int amask) {
+    //ADC automatic confug
+    AD1PCFG = 0xEFFF; //All PORTB = digital but RB12 = analog
+    AD1CON1 = 0x00E0; //Automatic conversion after sampling
+    AD1CHS = 0x000C0000; //Connect RB12/AN12 as CH0 input
+    AD1CSSL = 0; //No scanning required
+    AD1CON2 = 0; //Use MUXA, AVss/AVdd used as Vref+/-
+    AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
+    AD1CON1bits.ADON = 1; //turn on the ADC
 }
 
 /* This is the ISR for the keypad CN interrupts */
+
 /* The priority here needs to be changed */
 void __ISR(_CHANGE_NOTICE_VECTOR, ipl5) ChangeNotice_Handler(void) {
     // 1. Disable interrupts
     INTDisableInterrupts();
     // 2. Debounce keys
+    int forLoop = 0;
     while (forLoop < 1000) {
         forLoop++;
     }
@@ -243,160 +244,155 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl5) ChangeNotice_Handler(void) {
     number_of_keys = 0;
     Row1 = Row2 = Row3 = Row4 = 0;
     PORTB;
-	//Clears interrupt flag
+    //Clears interrupt flag
     IFS1CLR = 0x0001;
     // 5. Enable interrupts
     INTEnableInterrupts();
 
 }
 
-int readADC ( int ch )
-{
-  AD1CON1bits.SAMP=1; //1. start sampling
-  while (!ad1CON1bits.DONE); //2. Wait until done
-  return ADC1BUF0; //3. read conversion result
+int readADC(int ch) {
+    AD1CON1bits.SAMP = 1; //1. start sampling
+    while (!AD1CON1bits.DONE); //2. Wait until done
+    return ADC1BUF0; //3. read conversion result
 }
 
-int mode=1;
-int passcode=0;
+int mode = 1;
+int passcode = 0;
 unsigned int dummy;
 int key_to_react = 0;
 int pressed_key;
 int number_of_keys = 0;
 int key_detected;
 
+main() {
 
-main(){
-        int i;
-				INTDisableInterrupts();
-        /* These values should be changed to reflect our timer config!*/
-        // Configure Timer 5.
-        T5CONbits.ON = 0; // Stop timer, clear control registers
-        TMR5 = 0; // Timer counter
-        PR5 = 0xC000; //Timer count amount for interupt to occur
-        IPC5bits.T5IP=0; //prioirty 4
-        IFS0bits.T5IF=0; // clear interrupt flag
-        T5CONbits.TCKPS=0;  // prescaler at 1:256, internal clock sourc
-        T5CONbits.ON=1;  // Timer 5 module is enabled
-        IEC0bits.T5IE=1; //enable Timer 5
+    initADC(1);
 
-
-        //Configure Timer 4
-        T4CONbits.ON=0; //Turn Timer 4 off
-        TMR4=0; //Clear Timer 4 register
-        T4CONbits.TCKPS=3; //Select prescaler = 256
-        T4CONbits.TCS=0; //Select internal clock
-        PR4=901250; //Load period Register
-        IFS0bits.T4IF=0; //Clear Timer 4 interupt flag
-        IPC4bits.T4IP=4; //Set priority level to 4
-        IEC0bits.T4IE=1; // Enable Timer 4
-        T4CONbits.ON=1; //Turn Timer  4 on.
+    int i;
+    INTDisableInterrupts();
+    /* These values should be changed to reflect our timer config!*/
+    // Configure Timer 5.
+    T5CONbits.ON = 0; // Stop timer, clear control registers
+    TMR5 = 0; // Timer counter
+    PR5 = 0xC000; //Timer count amount for interupt to occur
+    IPC5bits.T5IP = 0; //prioirty 4
+    IFS0bits.T5IF = 0; // clear interrupt flag
+    T5CONbits.TCKPS = 0; // prescaler at 1:256, internal clock sourc
+    T5CONbits.ON = 1; // Timer 5 module is enabled
+    IEC0bits.T5IE = 1; //enable Timer 5
 
 
-				//Configure Change Notice for the keypad
-				// 1. Configure CNCON, CNEN, CNPUE
-				//First, turn on Change interrupts
-				CNCON = 0x8000;
-				//Then we want CN enable on pins 2,3,4,5
-				CNEN = 0x003C;
-				//We also want to enable the pull up resistors on the board
-				CNPUE = 0x003C;
+    //Configure Timer 4
+    T4CONbits.ON = 0; //Turn Timer 4 off
+    TMR4 = 0; //Clear Timer 4 register
+    T4CONbits.TCKPS = 3; //Select prescaler = 256
+    T4CONbits.TCS = 0; //Select internal clock
+    PR4 = 901250; //Load period Register
+    IFS0bits.T4IF = 0; //Clear Timer 4 interupt flag
+    IPC4bits.T4IP = 4; //Set priority level to 4
+    IEC0bits.T4IE = 1; // Enable Timer 4
+    T4CONbits.ON = 1; //Turn Timer  4 on.
 
-				// 2. Perform a dummy read to clear mismatch
-				PORTB;
 
-				// 3. Configure IPC5, IFS1, IEC1
-				//These set the priority and subpriority to 5 and 3 respectively
-				//This priority needs to be changed
-				IPC6SET = 0x00140000;
-				IPC6SET = 0x00030000;
-				//Clear the Interrupt flag status bit
-				IFS1CLR = 0x0001;
-				//Enable Change Notice Interrupts
-				IEC1SET = 0x0001;
+    //Configure Change Notice for the keypad
+    // 1. Configure CNCON, CNEN, CNPUE
+    //First, turn on Change interrupts
+    CNCON = 0x8000;
+    //Then we want CN enable on pins 2,3,4,5
+    CNEN = 0x003C;
+    //We also want to enable the pull up resistors on the board
+    CNPUE = 0x003C;
 
-				// 4. Enable vector interrupt
-				INTEnableSystemMultiVectoredInt();
-				//We want all the Row pins at zero so we can detect any inputs on the buttons.
-				Row1 = Row2 = Row3 = Row4 = 0;
+    // 2. Perform a dummy read to clear mismatch
+    PORTB;
 
-        /* assign values to sampleBuffer[] */
-        for (i=0; i<N; i++)
-        {
-            sampleBuffer[i].re=i;
-            sampleBuffer[i].im=0;
-        }
-        /* compute the corresponding frequency of each data point in frequency domain*/
-        for (i=0; i<N/2; i++)
-	{
-            freqVector[i] = i*(SAMPLE_FREQ/2)/((N/2) - 1);
-	}
+    // 3. Configure IPC5, IFS1, IEC1
+    //These set the priority and subpriority to 5 and 3 respectively
+    //This priority needs to be changed
+    IPC6SET = 0x00140000;
+    IPC6SET = 0x00030000;
+    //Clear the Interrupt flag status bit
+    IFS1CLR = 0x0001;
+    //Enable Change Notice Interrupts
+    IEC1SET = 0x0001;
 
-while(1){
+    // 4. Enable vector interrupt
+    INTEnableSystemMultiVectoredInt();
+    //We want all the Row pins at zero so we can detect any inputs on the buttons.
+    Row1 = Row2 = Row3 = Row4 = 0;
+
+    /* assign values to sampleBuffer[] */
+    for (i = 0; i < N; i++) {
+        sampleBuffer[i].re = i;
+        sampleBuffer[i].im = 0;
+    }
+    /* compute the corresponding frequency of each data point in frequency domain*/
+    for (i = 0; i < N / 2; i++) {
+        freqVector[i] = i * (SAMPLE_FREQ / 2) / ((N / 2) - 1);
+    }
+
+    while (1) {
         /* get the dominant frequency */
-        freq=freqVector[computeFFT(sampleBuffer)];
+        freq = freqVector[computeFFT(sampleBuffer)];
 
         /* Current state logic here*/
-				switch(mode):
-					case 1:
-					/* Pmod msd should show 's', and last 3 digits should show passcode */
+        switch (mode)
+            case 1:
+            /* Pmod msd should show 's', and last 3 digits should show passcode */
 
-						break;
-					case 2:
-					/* Pmod msd should show 'u', and last 3 digits should show off */
-						break;
-					case 3:
-					/* Pmod msd should show 'L', and last 3 digits should show entered pass */
-						break;
-					case 4:
-					/* Pmod msd should Flash "AAAA" */
-						break;
+            break;
+        case 2:
+        /* Pmod msd should show 'u', and last 3 digits should show off */
+        break;
+        case 3:
+        /* Pmod msd should show 'L', and last 3 digits should show entered pass */
+        break;
+        case 4:
+        /* Pmod msd should Flash "AAAA" */
+        break;
 
 
         /* Next state logic here*/
-				switch(mode):
-					case 1:
-					/* 0-9 should input digit, 'C' should clear, 'D' should delete, */
-					/* 'E' enter if valid input pass*/
-						break;
-					case 2:
-					/* if a button is pressed and held for >=1 second, go back to mode 1 */
-					/* if a button is pressed and held for <1 second, go to mode 3 */
-						break;
-					case 3:
-					/* 0-9 should input digit, 'C' should clear, 'D' should delete, */
-					/* 'E' enter if valid input pass. If pass is correct, enter mode 2*/
-					/* if pass incorrect, enter mode 4. If microphone frequency is equal */
-					/* to pass frequency, enter mode 2, else to mode 4. */
-						break;
-					case 4:
-					/* If SSDs have been flashing for 5 seconds, then enter mode 3.*/
-						break;
+        switch (mode)
+            case 1:
+            /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
+            /* 'E' enter if valid input pass*/
+            break;
+        case 2:
+        /* if a button is pressed and held for >=1 second, go back to mode 1 */
+        /* if a button is pressed and held for <1 second, go to mode 3 */
+        break;
+        case 3:
+        /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
+        /* 'E' enter if valid input pass. If pass is correct, enter mode 2*/
+        /* if pass incorrect, enter mode 4. If microphone frequency is equal */
+        /* to pass frequency, enter mode 2, else to mode 4. */
+        break;
+        case 4:
+        /* If SSDs have been flashing for 5 seconds, then enter mode 3.*/
+        break;
+    }
 }
-}
 
+int computeFFT(int16c *sampleBuffer) {
+    int i;
+    int dominant_freq = 1;
 
-int computeFFT(int16c *sampleBuffer)
-{
-	int i;
-        int dominant_freq=1;
+    /* computer N point FFT, taking sampleBuffer[] as time domain inputs
+     * and storing generated frequency domain outputs in dout[] */
+    mips_fft16(dout, sampleBuffer, fftc, scratch, log2N);
 
-	/* computer N point FFT, taking sampleBuffer[] as time domain inputs
-         * and storing generated frequency domain outputs in dout[] */
-	mips_fft16(dout, sampleBuffer, fftc, scratch, log2N);
+    /* compute single sided fft */
+    for (i = 0; i < N / 2; i++) {
+        singleSidedFFT[i] = 2 * ((dout[i].re * dout[i].re) + (dout[i].im * dout[i].im));
+    }
 
-	/* compute single sided fft */
-	for(i = 0; i < N/2; i++)
-	{
-		singleSidedFFT[i] = 2 * ((dout[i].re*dout[i].re) + (dout[i].im*dout[i].im));
-	}
+    /* find the index of dominant frequency, which is the index of the largest data points */
+    for (i = 1; i < N / 2; i++) {
+        if (singleSidedFFT[dominant_freq] < singleSidedFFT[i])
+            dominant_freq = i;
+    }
 
-        /* find the index of dominant frequency, which is the index of the largest data points */
-        for(i = 1; i < N/2; i++)
-	{
-            if (singleSidedFFT[dominant_freq]<singleSidedFFT[i])
-                    dominant_freq=i;
-        }
-
-        return dominant_freq;
+    return dominant_freq;
 }
