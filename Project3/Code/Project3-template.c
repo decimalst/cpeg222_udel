@@ -32,6 +32,49 @@ PBCLK = SYSCLK /FPBDIV = 80MHz*/
 /* number of FFT points (must be power of 2) */
 #define N 16
 
+// 7 Segment Display pmod using the TOP JA & JB jumpers
+// Segments
+#define SegA_R LATEbits.LATE0
+#define SegB_R LATEbits.LATE1
+#define SegC_R LATEbits.LATE2
+#define SegD_R LATEbits.LATE3
+#define SegE_R LATGbits.LATG9
+#define SegF_R LATGbits.LATG8
+#define SegG_R LATGbits.LATG7
+// Display selection. 0 = right, 1 = left (Cathode)
+#define DispSel_R LATGbits.LATG6
+
+// 7 Segment Display pmod using the TOP JC and JD jumpers
+#define SegA_L LATGbits.LATG12
+#define SegB_L LATGbits.LATG13
+#define SegC_L LATGbits.LATG14
+#define SegD_L LATGbits.LATG15
+#define SegE_L LATDbits.LATD7
+#define SegF_L LATDbits.LATD1
+#define SegG_L LATDbits.LATD9
+// Display selection. 0 = right, 1 = left (Cathode)
+#define DispSel_L LATCbits.LATC1
+
+//Keypad pmod using the JJ input
+//Column pins, should be inputs?
+#define Col4 PORTBbits.RB0
+#define Col3 PORTBbits.RB1
+#define Col2 PORTBbits.RB2
+#define Col1 PORTBbits.RB3
+//Row pins, should be outputs?
+#define Row4 LATBbits.LATB4
+#define Row3 LATBbits.LATB5
+#define Row2 LATBbits.LATB8
+#define Row1 LATBbits.LATB9
+
+//On Board LED pins
+#define BLed1   LATBbits.LATB10
+#define BLed2   LATBbits.LATB11
+#define BLed3   LATBbits.LATB12
+#define BLed4   LATBbits.LATB13
+
+//Port mapping: Mic- port JK and Keypad
+
 /* log2(16)=4 */
 int log2N = 4;
 
