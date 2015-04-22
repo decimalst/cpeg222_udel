@@ -23,7 +23,7 @@ PBCLK = SYSCLK /FPBDIV = 80MHz*/
 
 /* Input array with 16-bit complex fixed-point twiddle factors.
  this is for 16-point FFT. For other configurations, for example 32 point FFT,
- Change it to fft16c32*/
+ Change it to fft16c32 */
 #define fftc fft16c1024
 
 /* defines the sample frequency*/
@@ -73,10 +73,32 @@ PBCLK = SYSCLK /FPBDIV = 80MHz*/
 #define BLed3   LATBbits.LATB12
 #define BLed4   LATBbits.LATB13
 
-//Port mapping: Mic- port JK and Keypad
+//Port mapping: Mic- port JK input
+
+/* [Var]Variable Declarations */
+int for_Loop = 0;
+int for_Loop_blink = 0;
+int trigger = 0;
+
+int left_ssd_val = 1;
+int test = 1;
+
+unsigned int dummy;
+int key_to_react = 0;
+int pressed_key;
+int number_of_keys = 0;
+int key_detected;
+int button_lock = 0;
+
+int samp = 0;
+int mode = 1;
+int time_counter_ssd = 0;
+int time_counter_seconds = 0;
+
+int sample_counter = 0;
 
 /* log2(16)=4 */
-int log2N = 4;
+int log2N = 10;
 
 /* Input array with 16-bit complex fixed-point elements. */
 /* int 16c is data struct defined as following:
@@ -103,43 +125,87 @@ short freqVector[N];
 int freq = 0;
 
 // Function definitions
-int computeFFT(int16c *sampleBuffer);
+int computeFFT(int16c sampleBuffer[]);
+
+unsigned char SSD_number[] = {
+    0b0111111, //0
+    0b0000110, //1
+    0b1011011, //2
+    0b1001111, //3
+    0b1100110, //4
+    0b1101101, //5
+    0b1111101, //6
+    0b0000111, //7
+    0b1111111, //8
+    0b1101111, //9
+    0b1110111, //A
+    0b1111100, //B
+    0b0111001, //C
+    0b1011110, //D
+    0b1111001, //E
+    0b1110001, //F
+    0b1110110, //H
+    0b0111000, //L
+    0b0000000 //clear
+};
 
 //Timer 5 interrupt, we can use this for the first interrupt
 
-void __ISR(_TIMER_5_VECTOR, ipl4) _T5Interrupt(void) {
+void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
+    INTDisableInterrupts();
+    //This timer should occur on a 2048Hz frequency, and is used for the ADC and FFT
+    //first we should read from the ADC to find the value of the sample
+    //readADC();
+    //Because we're listening to a real valued signal, we will only write to the 're' value
+    sampleBuffer[sample_counter].re = readADC();
+    sample_counter++;
+    //Once we have the voltage value of the sample, we must put that into the buffer at the corresponding spot
+    //We are taking 2048 samples per second- Each time we take a sample, we write it to the FFT buffer
+    //The FFT buffer has a length N of 1024
+    //Thus, every time we take in 1024 samples, we must call the FFT to find the frequency
+
+    if (sample_counter == 1023) {
+        //call computeFFT() here;
+        freq = freqVector[computeFFT(&sampleBuffer)];
+
+        sample_counter = 0;
+    }
+
 
     IFS0CLR = 0x100000; // Clear Timer5 interrupt status flag (bit 20)
+    INTEnableInterrupts();
 }
 
-//Timer 4 interrupt, we can use this for the second interrupt
-//Note that we'll want to change either the Timer 5 ipl or Timer4 ipl
+//Timer 2/3 type B interrupt: we can use this for the SSD/1Sec and 2Sec displays
+//Note that this uses interrupt flag for Timer 3
 
-void __ISR(_TIMER_4_VECTOR, ipl4) _T4Interrupt(void) {
-
-    IFS0bits.T4IF = 0; // Clear Timer4 interrupt status flag
+void __ISR(_TIMER_3_VECTOR, ipl6) _T3Interrupt(void) {
+    INTDisableInterrupts();
+    //This timer occurs on a 80Hz frequency- every time it occurs, we should switch the SSD
+    //side
+    left_ssd_val = !(left_ssd_val);
+    time_counter_ssd++;
+    //Then we need to set up counting such that every 60th interrupt it increases the seconds timer:
+    if (time_counter_ssd % 80 == 0) {
+        //Now, in our logic, when we press a button, we simply set both time_counter_ssd and _seconds to 0
+        //and check their values on release
+        time_counter_seconds++;
+        time_counter_ssd = 0;
+    }
+    IFS0bits.T3IF = 0; // Clear Timer4 interrupt status flag
+    INTEnableInterrupts();
 }
 
-void initADC(int amask) {
-    //ADC automatic confug
-    AD1PCFG = 0xEFFF; //All PORTB = digital but RB12 = analog
-    AD1CON1 = 0x00E0; //Automatic conversion after sampling
-    AD1CHS = 0x000C0000; //Connect RB12/AN12 as CH0 input
-    AD1CSSL = 0; //No scanning required
-    AD1CON2 = 0; //Use MUXA, AVss/AVdd used as Vref+/-
-    AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
-    AD1CON1bits.ADON = 1; //turn on the ADC
-}
 
 /* This is the ISR for the keypad CN interrupts */
 
-/* The priority here needs to be changed */
-void __ISR(_CHANGE_NOTICE_VECTOR, ipl5) ChangeNotice_Handler(void) {
+/* The priority here needs to be changed, I believe */
+void __ISR(_CHANGE_NOTICE_VECTOR, ipl7) ChangeNotice_Handler(void) {
     // 1. Disable interrupts
-    INTDisableInterrupts();
+
     // 2. Debounce keys
     int forLoop = 0;
-    while (forLoop < 1000) {
+    while (forLoop < 1500) {
         forLoop++;
     }
     forLoop = 0;
@@ -235,10 +301,12 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl5) ChangeNotice_Handler(void) {
     if (number_of_keys > 1) {
         pressed_key = 0;
     }
-    if (number_of_keys == 1) {
+    if (number_of_keys == 1 && !(button_lock)) {
         key_detected = pressed_key;
         key_to_react = 1;
-    } else {
+    }
+    if (number_of_keys == 0 && button_lock) {
+        button_lock = 0;
         pressed_key = 0;
     }
     number_of_keys = 0;
@@ -247,52 +315,153 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl5) ChangeNotice_Handler(void) {
     //Clears interrupt flag
     IFS1CLR = 0x0001;
     // 5. Enable interrupts
-    INTEnableInterrupts();
+
 
 }
 
-int readADC(int ch) {
-    AD1CON1bits.SAMP = 1; //1. start sampling
-    while (!AD1CON1bits.DONE); //2. Wait until done
-    return ADC1BUF0; //3. read conversion result
+
+
+int readADC() {
+//    AD1CON1bits.SAMP = 1; //1. start sampling
+//    while (!AD1CON1bits.DONE); //2. Wait until done
+//    return ADC1BUF0; //3. read conversion result
+    AD1CON1bits.SAMP = 1; // 1. start sampling
+    for (TMR1 = 0; TMR1 < 400; TMR1++); //2. wait for sampling time
+    AD1CON1bits.SAMP = 0; // 3. start the conversion
+    while (!AD1CON1bits.DONE); // 4. wait conversion complete
+    return ADC1BUF0; // 5. read result
+
 }
 
-int mode = 1;
-int passcode = 0;
-unsigned int dummy;
-int key_to_react = 0;
-int pressed_key;
-int number_of_keys = 0;
-int key_detected;
+void displayDigit(unsigned char value, unsigned int left_ssd, unsigned int leftdisp) {
+    //For left=1, display on left SSD, else, on right SSD
+    if (left_ssd == 1) {
+        if (leftdisp == 1) {
+            SegA_L = value & 1;
+            SegB_L = (value >> 1) & 1;
+            SegC_L = (value >> 2) & 1;
+            SegD_L = (value >> 3) & 1;
+            SegE_L = (value >> 4) & 1;
+            SegF_L = (value >> 5) & 1;
+            SegG_L = (value >> 6) & 1;
+            DispSel_L = 0;
+        } else {
+            SegA_L = value & 1;
+            SegB_L = (value >> 1) & 1;
+            SegC_L = (value >> 2) & 1;
+            SegD_L = (value >> 3) & 1;
+            SegE_L = (value >> 4) & 1;
+            SegF_L = (value >> 5) & 1;
+            SegG_L = (value >> 6) & 1;
+            DispSel_L = 1;
+        }
+
+    } else {
+        if (leftdisp == 1) {
+            SegA_R = value & 1;
+            SegB_R = (value >> 1) & 1;
+            SegC_R = (value >> 2) & 1;
+            SegD_R = (value >> 3) & 1;
+            SegE_R = (value >> 4) & 1;
+            SegF_R = (value >> 5) & 1;
+            SegG_R = (value >> 6) & 1;
+            DispSel_R = 0;
+        } else {
+            SegA_R = value & 1;
+            SegB_R = (value >> 1) & 1;
+            SegC_R = (value >> 2) & 1;
+            SegD_R = (value >> 3) & 1;
+            SegE_R = (value >> 4) & 1;
+            SegF_R = (value >> 5) & 1;
+            SegG_R = (value >> 6) & 1;
+            DispSel_R = 1;
+        }
+
+    }
+}
+
+void showNumber(int digit, unsigned int left_ssd_num, unsigned int leftdisp) {
+    displayDigit(SSD_number[digit % 16], left_ssd_num, leftdisp);
+}
+void displaySSD(int input) {
+    //input 0 - 999 range
+    if (left_ssd_val) {
+        showNumber(input % 10, 0, 1);
+        showNumber((input / 100) % 10, 1, 1);
+    } else {
+        showNumber((input / 10) % 10, 0, 0);
+        showNumber(5, 1, 0);
+    }
+
+}
 
 main() {
 
-    initADC(1);
 
-    int i;
     INTDisableInterrupts();
+    //TRISB = 0b0001000000001111;
+    //ADC automatic confug
+//    AD1PCFG = 0xEFFF; //All PORTB = digital but RB12 = analog
+//    AD1CON1 = 0x00E0; //Automatic conversion after sampling
+//    AD1CHS = 0x000C0000; //Connect RB12/AN12 as CH0 input
+//    AD1CSSL = 0; //No scanning required
+//    AD1CON2 = 0; //Use MUXA, AVss/AVdd used as Vref+/-
+//    AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
+//    AD1CON1SET = 0x8000; //turn on the ADC
+
+    AD1PCFG = 0xEFFF; // all PORTB = digital but RB12 = analog
+    AD1CON1 = 0; // manual conversion sequence controlwhich
+    AD1CHS = 0x000C0000; // Connect RB2/AN2 as CH0 input ..
+    AD1CSSL = 0; // no scanning required
+    AD1CON2 = 0; // use MUXA, AVss/AVdd used as Vref+/-
+    AD1CON3 = 0x0002; // Tad= 6 x Tpb
+    AD1CON1SET = 0x8000; // turn on the ADC
+
+
+    //Configure ports C~G to be output ports
+    TRISC = 0;
+    TRISD = 0;
+    TRISE = 0;
+    TRISF = 0;
+    TRISG = 0;
+    // initialize C~G to 0
+    PORTC = 0x00;
+    PORTD = 0x00;
+    PORTE = 0x00;
+    PORTF = 0x00;
+    PORTG = 0x00;
+    //Set the pins that correspond to the Column pins to inputs
+
+    //Then clear everything but their pins
+    int i;
+
     /* These values should be changed to reflect our timer config!*/
-    // Configure Timer 5.
+    // Configure Timer for the ADC sampling
+    // This will be a type A timer
     T5CONbits.ON = 0; // Stop timer, clear control registers
     TMR5 = 0; // Timer counter
-    PR5 = 0xC000; //Timer count amount for interupt to occur
-    IPC5bits.T5IP = 0; //prioirty 4
+    PR5 = 39062; //Timer count amount for interupt to occur - 2048Hz frequency
+    IPC5bits.T5IP = 5; //prioirty 5
     IFS0bits.T5IF = 0; // clear interrupt flag
     T5CONbits.TCKPS = 0; // prescaler at 1:256, internal clock sourc
     T5CONbits.ON = 1; // Timer 5 module is enabled
     IEC0bits.T5IE = 1; //enable Timer 5
 
 
-    //Configure Timer 4
-    T4CONbits.ON = 0; //Turn Timer 4 off
-    TMR4 = 0; //Clear Timer 4 register
-    T4CONbits.TCKPS = 3; //Select prescaler = 256
-    T4CONbits.TCS = 0; //Select internal clock
-    PR4 = 901250; //Load period Register
-    IFS0bits.T4IF = 0; //Clear Timer 4 interupt flag
-    IPC4bits.T4IP = 4; //Set priority level to 4
-    IEC0bits.T4IE = 1; // Enable Timer 4
-    T4CONbits.ON = 1; //Turn Timer  4 on.
+    //Configure Timer for the SSD display and 1 and 5 second timers respectively
+    //This will be a Type B timer of TMR 2 and TMR 3
+    T2CONbits.ON = 0; //Turn Timer 2 off
+    T3CONbits.ON = 0; //Turn Timer 3 off
+    T2CONbits.T32 = 1; //Enable 32 bit mode
+    T3CONbits.TCKPS = 0; //Select prescaler = 1
+    TMR2 = 0; //Clear Timer 4 register
+    T3CONbits.TCS = 0; //Select internal clock
+    PR2 = 1000000; //Load period Register - 60Hz frequency
+    IFS0bits.T3IF = 0; //Clear Timer 2 interupt flag
+    IPC3bits.T3IP = 6; //Set priority level to 6
+    IEC0bits.T3IE = 1; // Enable Timer 2
+    T2CONbits.ON = 1; //Turn Timer  2 on.
+
 
 
     //Configure Change Notice for the keypad
@@ -308,10 +477,10 @@ main() {
     PORTB;
 
     // 3. Configure IPC5, IFS1, IEC1
-    //These set the priority and subpriority to 5 and 3 respectively
-    //This priority needs to be changed
-    IPC6SET = 0x00140000;
-    IPC6SET = 0x00030000;
+    //These set the priority and subpriority to 4 and 3 respectively
+    //This priority needs to be lower than the timer interrupts, at 5 and 6
+    IPC6SET = 0x000F0000;
+
     //Clear the Interrupt flag status bit
     IFS1CLR = 0x0001;
     //Enable Change Notice Interrupts
@@ -321,6 +490,8 @@ main() {
     INTEnableSystemMultiVectoredInt();
     //We want all the Row pins at zero so we can detect any inputs on the buttons.
     Row1 = Row2 = Row3 = Row4 = 0;
+
+
 
     /* assign values to sampleBuffer[] */
     for (i = 0; i < N; i++) {
@@ -333,45 +504,51 @@ main() {
     }
 
     while (1) {
+        
+        displaySSD(freq);
+
+
+
         /* get the dominant frequency */
-        freq = freqVector[computeFFT(sampleBuffer)];
+
 
         /* Current state logic here*/
-        switch (mode)
+        switch (mode) {
             case 1:
-            /* Pmod msd should show 's', and last 3 digits should show passcode */
+                /* Pmod msd should show 's', and last 3 digits should show passcode */
 
-            break;
-        case 2:
-        /* Pmod msd should show 'u', and last 3 digits should show off */
-        break;
-        case 3:
-        /* Pmod msd should show 'L', and last 3 digits should show entered pass */
-        break;
-        case 4:
-        /* Pmod msd should Flash "AAAA" */
-        break;
-
+                break;
+            case 2:
+                /* Pmod msd should show 'u', and last 3 digits should show off */
+                break;
+            case 3:
+                /* Pmod msd should show 'L', and last 3 digits should show entered pass */
+                break;
+            case 4:
+                /* Pmod msd should Flash "AAAA" */
+                break;
+        }
 
         /* Next state logic here*/
-        switch (mode)
+        switch (mode) {
             case 1:
-            /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
-            /* 'E' enter if valid input pass*/
-            break;
-        case 2:
-        /* if a button is pressed and held for >=1 second, go back to mode 1 */
-        /* if a button is pressed and held for <1 second, go to mode 3 */
-        break;
-        case 3:
-        /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
-        /* 'E' enter if valid input pass. If pass is correct, enter mode 2*/
-        /* if pass incorrect, enter mode 4. If microphone frequency is equal */
-        /* to pass frequency, enter mode 2, else to mode 4. */
-        break;
-        case 4:
-        /* If SSDs have been flashing for 5 seconds, then enter mode 3.*/
-        break;
+                /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
+                /* 'E' enter if valid input pass*/
+                break;
+            case 2:
+                /* if a button is pressed and held for >=1 second, go back to mode 1 */
+                /* if a button is pressed and held for <1 second, go to mode 3 */
+                break;
+            case 3:
+                /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
+                /* 'E' enter if valid input pass. If pass is correct, enter mode 2*/
+                /* if pass incorrect, enter mode 4. If microphone frequency is equal */
+                /* to pass frequency, enter mode 2, else to mode 4. */
+                break;
+            case 4:
+                /* If SSDs have been flashing for 5 seconds, then enter mode 3.*/
+                break;
+        }
     }
 }
 
