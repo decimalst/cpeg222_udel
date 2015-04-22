@@ -376,7 +376,7 @@ int readADC() {
 //    while (!AD1CON1bits.DONE); //2. Wait until done
 //    return ADC1BUF0; //3. read conversion result
     AD1CON1bits.SAMP = 1; // 1. start sampling
-    for (TMR1 = 0; TMR1 < 400; TMR1++); //2. wait for sampling time
+    for (TMR1 = 0; TMR1 < 100; TMR1++); //2. wait for sampling time
     AD1CON1bits.SAMP = 0; // 3. start the conversion
     while (!AD1CON1bits.DONE); // 4. wait conversion complete
     return ADC1BUF0; // 5. read result
