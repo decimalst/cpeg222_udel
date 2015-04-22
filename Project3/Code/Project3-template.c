@@ -184,7 +184,7 @@ void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
     //first we should read from the ADC to find the value of the sample
     //readADC();
     //Because we're listening to a real valued signal, we will only write to the 're' value
-    //sampleBuffer[sample_counter].re = readADC();
+    sampleBuffer[sample_counter].re = readADC();
     sample_counter++;
     //Once we have the voltage value of the sample, we must put that into the buffer at the corresponding spot
     //We are taking 2048 samples per second- Each time we take a sample, we write it to the FFT buffer
@@ -193,7 +193,7 @@ void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
 
     if (sample_counter == 1024) {
         //call computeFFT() here;
-        //freq = freqVector[computeFFT(&sampleBuffer)];
+        freq = freqVector[computeFFT(&sampleBuffer)];
 
         sample_counter = 0;
     }
@@ -221,7 +221,7 @@ void __ISR(_TIMER_3_VECTOR, ipl6) _T3Interrupt(void) {
             switch (mode) {
             case 1:
                 /* Pmod msd should show 's', and last 3 digits should show passcode */
-                displaySSD(passcode,5);
+                displaySSD(freq,5);
                 break;
             case 2:
                 /* Pmod msd should show 'u', and last 3 digits should show off */
@@ -376,7 +376,7 @@ int readADC() {
 //    while (!AD1CON1bits.DONE); //2. Wait until done
 //    return ADC1BUF0; //3. read conversion result
     AD1CON1bits.SAMP = 1; // 1. start sampling
-    for (TMR1 = 0; TMR1 < 100; TMR1++); //2. wait for sampling time
+    for (TMR1=0; TMR1<100; TMR1++); //2. wait for sampling time
     AD1CON1bits.SAMP = 0; // 3. start the conversion
     while (!AD1CON1bits.DONE); // 4. wait conversion complete
     return ADC1BUF0; // 5. read result
@@ -475,7 +475,7 @@ main() {
 
 
     INTDisableInterrupts();
-    TRISB = 0b0001000000001111;
+    TRISB = 0x80F;
     //ADC automatic config
 //    AD1PCFG = 0xEFFF; //All PORTB = digital but RB12 = analog
 //    AD1CON1 = 0x00E0; //Automatic conversion after sampling
@@ -486,13 +486,13 @@ main() {
 //    AD1CON1SET = 0x8000; //turn on the ADC
 
     //ADC manual config
-    AD1PCFG = 0xEFFF; // all PORTB = digital but RB12 = analog
-    AD1CON1 = 0; // manual conversion sequence controlwhich
-    AD1CHS = 0x000C0000; // Connect RB2/AN2 as CH0 input ..
+    AD1PCFG = 0xF7FF; // all PORTB = digital but RB7 = analog
+    AD1CON1 = 0; // manual conversion sequence control
+    AD1CHS = 0x000B0000; // Connect RB7/AN7 as CH0 input
     AD1CSSL = 0; // no scanning required
     AD1CON2 = 0; // use MUXA, AVss/AVdd used as Vref+/-
-    AD1CON3 = 0x0002; // Tad= 6 x Tpb
-    AD1CON1SET = 0x8000; // turn on the ADC
+    AD1CON3 = 0x1F02; // Tad = 128 x Tpb, Sample time = 31 Tad
+    AD1CON1bits.ADON = 1; // turn on the ADC
 
 
     //Configure ports C~G to be output ports
