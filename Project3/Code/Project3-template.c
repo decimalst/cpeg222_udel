@@ -90,13 +90,17 @@ int key_to_react = 1;
 int key_pressed = 0;
 int key_released = 0;
 int pressed_key;
-int last_key=0;
+int last_key = 0;
 int key_detected;
 int button_lock = 0;
 
-int passcode=0;
-int guess=0;
-int length_held=0;
+int passcode = 0;
+int guess = 0;
+int length_held = 0;
+
+int changed_to_mode_3 = 0;
+int first_press_in_mode_3 = 0;
+int first_press_time_mode_3 = 0;
 
 int samp = 0;
 int mode = 1;
@@ -214,29 +218,29 @@ void __ISR(_TIMER_3_VECTOR, ipl6) _T3Interrupt(void) {
     if (time_counter_ssd % 80 == 0) {
         //Now, in our logic, when we press a button, we simply set both time_counter_ssd and _seconds to 0
         //and check their values on release
-        SSD_blink=!SSD_blink;
+        SSD_blink = !SSD_blink;
         time_counter_seconds++;
         time_counter_ssd = 0;
     }
-            switch (mode) {
-            case 1:
-                /* Pmod msd should show 's', and last 3 digits should show passcode */
-                displaySSD(freq,5);
-                break;
-            case 2:
-                /* Pmod msd should show 'u', and last 3 digits should show off */
-                displaySSD(0,18);
-                break;
-            case 3:
-                /* Pmod msd should show 'L', and last 3 digits should show entered pass */
-                displaySSD(guess,17);
-                break;
-            case 4:
-                /* Pmod msd should Flash "AAAA" */
-                displaySSD(0,4);
-                break;
-        }
-    IFS0bits.T3IF = 0; // Clear Timer4 interrupt status flag
+    switch (mode) {
+        case 1:
+            /* Pmod msd should show 's', and last 3 digits should show passcode */
+            displaySSD(passcode, 5);
+            break;
+        case 2:
+            /* Pmod msd should show 'u', and last 3 digits should show off */
+            displaySSD(0, 18);
+            break;
+        case 3:
+            /* Pmod msd should show 'L', and last 3 digits should show entered pass */
+            displaySSD(guess, 17);
+            break;
+        case 4:
+            /* Pmod msd should Flash "AAAA" */
+            displaySSD(0, 4);
+            break;
+    }
+    IFS0bits.T3IF = 0; // Clear Timer3 interrupt status flag
 }
 
 
@@ -247,7 +251,7 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl4) ChangeNotice_Handler(void) {
     // 1. Disable interrupts
     // 2. Debounce keys
     int forLoop = 0;
-    while (forLoop < 1) {
+    while (forLoop < 100) {
         forLoop++;
     }
     forLoop = 0;
@@ -323,31 +327,35 @@ void __ISR(_CHANGE_NOTICE_VECTOR, ipl4) ChangeNotice_Handler(void) {
         pressed_key = 15;
     }
 
-    if (pressed_key!=16 && !(button_lock)) {
+    if (pressed_key != 16 && !(button_lock)) {
         //If we had a key press and not release, activate buttonlock
-        button_lock=1;
+        button_lock = 1;
         //Start counting how long the button is held
-        length_held=0;
-        time_counter_ssd = 0;
-        time_counter_seconds = 0;
+        if (mode == 2) {
+            length_held = 0;
+            time_counter_ssd = 0;
+            time_counter_seconds = 0;
+        }
         //Store the pressed key in key_detected
         key_detected = pressed_key;
         //Store the fact a key was pressed in a flag
-        key_pressed=1;
+        key_pressed = 1;
         //Store the fact that we should react to the press in a flag
         key_to_react = 1;
     }
-    if (pressed_key==16 && button_lock) {
+    if (pressed_key == 16 && button_lock) {
         //If we had a key release and not press, turn off buttonlock
-        button_lock=0;
+        button_lock = 0;
         //We started the time counter at zero on the last press, thus length held
         //is equal to the timer
-        length_held=time_counter_seconds;
+        if (mode == 2) {
+            length_held = time_counter_seconds;
+        }
         //Store the key release in a flag
         key_released = 1;
         key_to_react = 1;
         //Keep track of what the key was that we released
-        last_key=key_detected;
+        last_key = key_detected;
     }
     Row1 = Row2 = Row3 = Row4 = 0;
     PORTB;
@@ -370,13 +378,12 @@ int key_detected_toregint(int a) {
     return to_Return;
 }
 
-
 int readADC() {
-//    AD1CON1bits.SAMP = 1; //1. start sampling
-//    while (!AD1CON1bits.DONE); //2. Wait until done
-//    return ADC1BUF0; //3. read conversion result
+    //    AD1CON1bits.SAMP = 1; //1. start sampling
+    //    while (!AD1CON1bits.DONE); //2. Wait until done
+    //    return ADC1BUF0; //3. read conversion result
     AD1CON1bits.SAMP = 1; // 1. start sampling
-    for (TMR1=0; TMR1<100; TMR1++); //2. wait for sampling time
+    for (TMR1 = 0; TMR1 < 100; TMR1++); //2. wait for sampling time
     AD1CON1bits.SAMP = 0; // 3. start the conversion
     while (!AD1CON1bits.DONE); // 4. wait conversion complete
     return ADC1BUF0; // 5. read result
@@ -433,39 +440,38 @@ void displayDigit(unsigned char value, unsigned int left_ssd, unsigned int leftd
 void showNumber(int digit, unsigned int left_ssd_num, unsigned int leftdisp) {
     displayDigit(SSD_number[digit % 20], left_ssd_num, leftdisp);
 }
+
 void clearSSDS() {
     displayDigit(0b0000000, 0, 0);
     displayDigit(0b0000000, 1, 0);
     displayDigit(0b0000000, 0, 1);
     displayDigit(0b0000000, 1, 1);
 }
+
 void displaySSD(int input, int mode_input) {
     //input 0 - 999 range
-    if(mode==1 || mode ==3){
+    if (mode == 1 || mode == 3) {
         if (left_ssd_val) {
             showNumber(input % 10, 0, 1);
             showNumber((input / 100) % 10, 1, 1);
-        }
-        else {
+        } else {
             showNumber((input / 10) % 10, 0, 0);
             showNumber(mode_input, 1, 0);
         }
     }
-    if(mode==2){
-            showNumber(18, 1, 0);
+    if (mode == 2) {
+        showNumber(18, 1, 0);
     }
-    if(mode==4){
-        if(SSD_blink){
+    if (mode == 4) {
+        if (SSD_blink) {
             if (left_ssd_val) {
                 showNumber(10, 0, 1);
                 showNumber(10, 1, 1);
-            }
-            else {
+            } else {
                 showNumber(10, 0, 0);
                 showNumber(10, 1, 0);
             }
-        }
-        else{
+        } else {
             clearSSDS();
         }
     }
@@ -477,16 +483,16 @@ main() {
     INTDisableInterrupts();
     TRISB = 0x80F;
     //ADC automatic config
-//    AD1PCFG = 0xEFFF; //All PORTB = digital but RB12 = analog
-//    AD1CON1 = 0x00E0; //Automatic conversion after sampling
-//    AD1CHS = 0x000C0000; //Connect RB12/AN12 as CH0 input
-//    AD1CSSL = 0; //No scanning required
-//    AD1CON2 = 0; //Use MUXA, AVss/AVdd used as Vref+/-
-//    AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
-//    AD1CON1SET = 0x8000; //turn on the ADC
+    //    AD1PCFG = 0xEFFF; //All PORTB = digital but RB12 = analog
+    //    AD1CON1 = 0x00E0; //Automatic conversion after sampling
+    //    AD1CHS = 0x000C0000; //Connect RB12/AN12 as CH0 input
+    //    AD1CSSL = 0; //No scanning required
+    //    AD1CON2 = 0; //Use MUXA, AVss/AVdd used as Vref+/-
+    //    AD1CON3 = 0x1F3F; //Tad=128 x Tpb, Sample time=31 Tad
+    //    AD1CON1SET = 0x8000; //turn on the ADC
 
     //ADC manual config
-    AD1PCFG = 0xF7FF; // all PORTB = digital but RB7 = analog
+    AD1PCFG = 0xF7FF; // all PORTB = digital but RB11 = analog
     AD1CON1 = 0; // manual conversion sequence control
     AD1CHS = 0x000B0000; // Connect RB7/AN7 as CH0 input
     AD1CSSL = 0; // no scanning required
@@ -534,6 +540,7 @@ main() {
     T3CONbits.TCKPS = 0; //Select prescaler = 1
     TMR2 = 0; //Clear Timer 4 register
     T3CONbits.TCS = 0; //Select internal clock
+    //Event freq(80Hz)=(system frequency80MHz)/(prescaler(1)*(PR value +1))
     PR2 = 1000000; //Load period Register - 80Hz frequency
     IFS0bits.T3IF = 0; //Clear Timer 2 interupt flag
     IPC3bits.T3IP = 6; //Set priority level to 6
@@ -558,10 +565,10 @@ main() {
     PORTB;
 
     // 3. Configure IPC5, IFS1, IEC1
-    //These set the priority and subpriority to 4 and 3 respectively
+    //These set the priority and subpriority to 4 and 1 respectively
     //This priority needs to be lower than the timer interrupts, at 5 and 6
-    IPC6bits.CNIP=4;
-    IPC6bits.CNIS=3;
+    IPC6bits.CNIP = 4;
+    IPC6bits.CNIS = 1;
     //Clear the Interrupt flag status bit
     IFS1CLR = 0x0001;
     //Enable Change Notice Interrupts
@@ -592,24 +599,24 @@ main() {
 
 
         /* Current state logic here*/
-//        switch (mode) {
-//            case 1:
-//                /* Pmod msd should show 's', and last 3 digits should show passcode */
-//                displaySSD(passcode,5);
-//                break;
-//            case 2:
-//                /* Pmod msd should show 'u', and last 3 digits should show off */
-//                displaySSD(0,18);
-//                break;
-//            case 3:
-//                /* Pmod msd should show 'L', and last 3 digits should show entered pass */
-//                displaySSD(guess,17);
-//                break;
-//            case 4:
-//                /* Pmod msd should Flash "AAAA" */
-//                displaySSD(0,4);
-//                break;
-//        }
+        //        switch (mode) {
+        //            case 1:
+        //                /* Pmod msd should show 's', and last 3 digits should show passcode */
+        //                displaySSD(passcode,5);
+        //                break;
+        //            case 2:
+        //                /* Pmod msd should show 'u', and last 3 digits should show off */
+        //                displaySSD(0,18);
+        //                break;
+        //            case 3:
+        //                /* Pmod msd should show 'L', and last 3 digits should show entered pass */
+        //                displaySSD(guess,17);
+        //                break;
+        //            case 4:
+        //                /* Pmod msd should Flash "AAAA" */
+        //                displaySSD(0,4);
+        //                break;
+        //        }
 
         /* Next state logic here*/
         switch (mode) {
@@ -617,23 +624,20 @@ main() {
                 /* 0-9 should input digit, 'C' should clear, 'D' should delete, */
                 /* 'E' enter if valid input pass*/
                 if (key_to_react) {
-                //perform various tests and actions on key accordingly
-                    if(key_pressed){
-                        key_pressed=0;
+                    //perform various tests and actions on key accordingly
+                    if (key_pressed) {
+                        key_pressed = 0;
                         key_to_react = 0;
-                }
-                else if(key_released){
-                    if ((key_detected >= 0 && key_detected <= 2) || (key_detected >= 4 && key_detected <= 6) || (key_detected >= 8 && key_detected <= 10) || key_detected == 12) {
+                    } else if (key_released) {
+                        if ((key_detected >= 0 && key_detected <= 2) || (key_detected >= 4 && key_detected <= 6) || (key_detected >= 8 && key_detected <= 10) || key_detected == 12) {
                             if (passcode == 0) {
                                 passcode = key_detected_toregint(key_detected);
                             } else if (passcode > 0 && passcode < 10) {
                                 passcode = (10 * passcode) + key_detected_toregint(key_detected);
-                            }
-                            else if (passcode >=10 && passcode <100){
+                            } else if (passcode >= 10 && passcode < 100) {
                                 passcode = (10 * passcode) + key_detected_toregint(key_detected);
                             }
-                        }
-                        else if (isalpha(keypad_number[key_detected])) {
+                        } else if (isalpha(keypad_number[key_detected])) {
 
                             if (keypad_number[key_detected] == 'D') {
                                 passcode = (passcode - (passcode % 10)) / 10;
@@ -642,40 +646,37 @@ main() {
                                 passcode = 0;
                             }
                             if (keypad_number[key_detected] == 'E') {
-                                if (passcode > 300 && passcode < 999) {
+                                if (passcode >= 300 && passcode <= 999) {
                                     guess = 0;
                                     mode = 2;
                                     clearSSDS();
                                 }
                             }
                         }
-                        key_released=0;
+                        key_released = 0;
                         key_to_react = 0;
+                    }
                 }
-            }
                 break;
             case 2:
                 /* if a button is pressed and held for >=1 second, go back to mode 1 */
                 /* if a button is pressed and held for <1 second, go to mode 3 */
-                if (key_to_react)
-                {
-                    if (key_released)
-                    {
-                        if(length_held<1){
-                            mode=1;
-                            key_to_react=0;
-                            key_released=0;
+                if (key_to_react) {
+                    if (key_released) {
+                        if (length_held >= 1) {
+                            mode = 1;
+                            key_to_react = 0;
+                            key_released = 0;
+                            passcode = 0;
                         }
-                        if(length_held>=1){
-                            mode=3;
-                            key_to_react=0;
-                            key_released=0;
+                        if (length_held < 1) {
+                            mode = 3;
+                            key_to_react = 0;
+                            key_released = 0;
                         }
-                    }
-                    else
-                    {
-                        key_to_react=0;
-                        key_pressed=0;
+                    } else {
+                        key_to_react = 0;
+                        key_pressed = 0;
                     }
                 }
                 break;
@@ -684,19 +685,34 @@ main() {
                 /* 'E' enter if valid input pass. If pass is correct, enter mode 2*/
                 /* if pass incorrect, enter mode 4. If microphone frequency is equal */
                 /* to pass frequency, enter mode 2, else to mode 4. */
+                if (changed_to_mode_3) {
+                    guess = 0;
+                    changed_to_mode_3 = 0;
+                }
+
+                if (first_press_in_mode_3) {
+                    if (time_counter_seconds > first_press_time_mode_3 + 5) {
+                        mode = 4;
+                        time_counter_ssd = 0;
+                        time_counter_seconds = 0;
+                    }
+                }
                 if (key_to_react) {
-                //perform various tests and actions on key accordingly
-                    if(key_released){
+                    //perform various tests and actions on key accordingly
+                    if (!first_press_in_mode_3) {
+                        first_press_in_mode_3 = 1;
+                        first_press_time_mode_3 = time_counter_seconds;
+                    }
+                    if (key_released) {
                         if ((key_detected >= 0 && key_detected <= 2) || (key_detected >= 4 && key_detected <= 6) || (key_detected >= 8 && key_detected <= 10) || key_detected == 12) {
                             if (guess == 0) {
                                 guess = key_detected_toregint(key_detected);
                             } else if (guess > 0 && guess < 10) {
                                 guess = (10 * guess) + key_detected_toregint(key_detected);
-                            }
-                            else if (guess >=10 && guess <100){
+                            } else if (guess >= 10 && guess < 100) {
                                 guess = (10 * guess) + key_detected_toregint(key_detected);
                             }
-                    }
+                        }
                         if (isalpha(keypad_number[key_detected])) {
 
                             if (keypad_number[key_detected] == 'D') {
@@ -709,31 +725,47 @@ main() {
                                 if (guess == passcode) {
                                     mode = 2;
                                     clearSSDS();
-                                }
-                                else{
+                                    guess = 0;
+                                } else {
                                     mode = 4;
                                     time_counter_ssd = 0;
                                     time_counter_seconds = 0;
                                 }
                             }
                         }
-                    key_to_react = 0;
-                    key_released = 0;
-                    }
-                    else if(key_pressed){
-                        key_pressed=0;
-                        key_to_react=0;
+                        key_to_react = 0;
+                        key_released = 0;
+                    } else if (key_pressed) {
+                        key_pressed = 0;
+                        key_to_react = 0;
                     }
 
-            }
+                }
+
+                if (readADC() > 400) {
+                    if (freq >= .97 * passcode && freq <= 1.03 * passcode) {
+                        mode = 2;
+                        clearSSDS();
+                        guess = 0;
+                    } else {
+                        mode = 4;
+                        time_counter_ssd = 0;
+                        time_counter_seconds = 0;
+                    }
+                }
                 break;
             case 4:
                 /* If SSDs have been flashing for 5 seconds, then enter mode 3.*/
-                if(time_counter_seconds==5){
+                if (time_counter_seconds == 5) {
                     mode = 3;
+                    guess = 0;
                     time_counter_ssd = 0;
                     time_counter_seconds = 0;
+                    changed_to_mode_3 = 1;
+                    first_press_in_mode_3 = 0;
                 }
+
+
                 break;
         }
     }
