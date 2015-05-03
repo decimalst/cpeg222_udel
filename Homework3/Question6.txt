@@ -1,0 +1,9 @@
+Question 6:
+Direct Memory Access (DMA) allows devices to access memory directly rather than working
+through the CPU. This can dramatically speed-up the performance of peripherals, but adds
+complexity to memory system implementations. Of the following peripherals, which would
+benefit from DMA? What criteria determine if DMA is appropriate?
+(a) Graphics card
+(b) Sound card 
+A) A graphics card would benefit from DMA. A graphics card may be continuously receiving data to its memory of what images to output to the screen. Because of the extremely frequency of access, enabling DMA on for a graphics card may free up a lot of CPU cycles. Similarly, a Graphics card has a processing unit on board which can perform the needed calculations on the memory it accesses to then send it to the screen. This will free up the CPU for other tasks.
+B) A sound card would also benefit from DMA. If we are, for example, listening to a song file, the sound card may load the song file directly to its onboard memory where it can process and output it to the audio port. This will free the CPU up from having to process the audio data itself.

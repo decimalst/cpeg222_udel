@@ -186,8 +186,9 @@ char keypad_number[] = {
 void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
     //This timer should occur on a 2048Hz frequency, and is used for the ADC and FFT
     //first we should read from the ADC to find the value of the sample
-    //readADC();
+    //using readADC();
     //Because we're listening to a real valued signal, we will only write to the 're' value
+    //We can keep the 'im' value at 0, as set in the declaration loop later.
     sampleBuffer[sample_counter].re = readADC();
     sample_counter++;
     //Once we have the voltage value of the sample, we must put that into the buffer at the corresponding spot

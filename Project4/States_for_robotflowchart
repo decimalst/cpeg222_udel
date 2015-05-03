@@ -1,0 +1,24 @@
+States for robot
+1. Initial/rest
+2. Movement
+	a. move straight
+	b. move left
+	c. move right
+3. end/rest
+
+State 1 logic
+If we hear a loud sound, begin moving.
+If we push an on board button, also begin moving.
+If neither occur, stay in state 1.
+No output on LED or SSD displays
+
+State 2 logic
+While moving, we don't need to listen for a sound, so we can ignore the sample taking part from mic/ADC
+We will have an arrangement of 4 IR sensors, near center, far center, left, and right
+If we have near center and far center both detecting, move straight.
+If we have near center and right center both detecting, move right
+If we have near center and left center both detecting, move left
+If we have both left and right detecting and near center but not far center, transition to state 3.
+
+State 3 logic:
+Stop moving/stop all servo PWM.
