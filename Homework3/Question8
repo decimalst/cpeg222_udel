@@ -1,0 +1,17 @@
+8. What is the bottleneck in the following system setup, the CPU, memory bus, or the disk set?
+ The user program continuously performs reads of 64KB blocks, and requires 2 million
+cycles to process each block.
+ The clock rate is 3GHz.
+ The maximum sustained transfer rate of the memory bus is 640MB/sec. 
+ The operating system requires 1 million cycles of overhead for each I/O operation.
+ The read/write bandwidth of the disk controller and the disk drives is 64MB/sec, disk
+average seek (plus rotational) latency is 9ms.
+ There are 5 disks attached to the bus each with its own controller. (Assume that each disk
+can be controlled independently and ignore disk conflicts.) 
+We have 3 operations, processing the block in the CPU, loading the block from memory into the cache, and loading the block from hard disk into memory
+For the block processing in the CPU we will take 2 Million cycles to process, with a 3GHz clock speed(3*10^9 cycles/second), which will take us (2*10^6)/(3*10^9) = 0.666mS to perform.
+For transferring the block from memory to the CPU we will have 1 Million cycles of I/O overhead, and then have to transfer 64KB at 640 MB/s.
+So, we have (64*10^3)/(640*10^6) + (1*10^6)/(3*10^9) = 0.433mS
+For transferring the block from hard disk to memory, we will have 1 Million cycles of I/O latency, then have a 9mS seek time, then a transfer of 64KB at 64MB/s.
+So, we have (64*10^3)/(64*10^6) + 9mS + (1*10^6)/(3*10^9)= 10.3mS
+Thus, we see that the hard disk is the bottleneck of the system.

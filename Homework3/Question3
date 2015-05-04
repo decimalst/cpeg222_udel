@@ -1,0 +1,13 @@
+3. Assume a student configures his timer and ADC to sample at 4KHz. When a sample arrives, an interrupt
+handler will be invoked to process the sample. When 1024 samples are collected, an FFT procedure is
+invoked to process them. Assume the processor takes 200 cycles to switch from the a procedure to ISR,
+the ADC ISR takes 500 cycles to process each sample, and FFT takes 50,000 cycles to process 1024
+sample points at once. The processor speed is 40MHz and executes one instruction per cycle.
+(a) How many application instructions can be executed between two consecutive interrupts?
+(b) If timer interrupts is allowed to interrupt FFT, in one single FFT process, how many times will FFT
+be interrupted? 
+
+a)Given a processor speed of 40MHz, and a timer at 4KHz, we will have the timer interrupt occur 10,000 times per second from (40*10^6)/(4*10^3), and thus there will be 4000 cycles between each timer interrupt
+Then, given that it takes 200 cycles to switch from the procedure to the ISR, 500 cycles to sample, and 200 cycles to switch back, the ISR will take 900  cycles to complete.
+Therefore, we will have 4000-900 = 3100 cycles for the application rather than the ISR, which is 3100 application instructions between interrupts.
+b)We know that the FFT will take 50,000 cycles to complete. The FFT will occur in the cycles between interrupts, if the timer interrupt can interrupt it. Thus, from 1 FFT per 50,000 cycles * 3100 cycles per interrupt = 0.062 FFT/interrupt, or the FFT will be interruptted 16 times before completing.
