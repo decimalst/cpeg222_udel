@@ -1,0 +1,31 @@
+7)
+a)
+FireWire:
+Firewire packets are built from 3 parts
+A 10-bit bus ID, to determine which FireWire bus generated the data,
+A 6-bit physical ID to identify the device which sent the data, and
+A 48-bit storage area capable of addressing 256 terabytes of information for each node.
+These 3 parts are then sent via peer-to-peer communication, with the option of up to 63 devices being linked at a single time
+
+USB:
+USB works based off a single host.  The host can open communication with anything attached to it and send/receive data.
+
+PCI:
+PCI communication works in a master-slave relationship.  The master can start communication at any time, and specifies the starting address of the transaction, if its read or write, and which area (memory, io, configuration) he wants to speak to and then the communication takes place.
+
+SATA:
+SATA communication takes place directly between the computer and the device (usually a hard drive). This communication is extremely fast because it is designed for this specific purpose.
+
+
+b)
+FireWire:
+Firewire is much more expensive then the other busses so in practice tends to be used less often unless its faster speed is needed.
+
+USB: 
+USB communication speeds are much lower then other busses.  Also since it uses a single host instead of peer-to-peer the host must initiate all data transfers.
+
+PCI:
+PCI cards are much bigger then FireWire and USB devices and are installed inside the computer, making them much harder to setup and install for a lot of communication needs.
+
+SATA:
+SATA is designed to be used between hard drives and computers so it is very limited in its uses.
