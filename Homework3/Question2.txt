@@ -9,5 +9,5 @@ resolution; (2) 7-bits of resolution.
 
 A)1) Assuming we have a 4 bit resolution, we can calculate the smallest detectable change from 4V/2^4, which is 4V/16 = 0.25V
 A)2)Assuming we have a 7 bit resolution, we  can calculate the smallest detectable change from 4V/2^7, which is 4V/128 = 0.03125V
-B)1)With a 4 bit resolution, we find a digital value for 3.14 of (3.14/0.25) rounded, which is (12.56) rounded up to 13. Then, our error is 13-12.55 * 0.25= 0.11Volts.
-B)2)With a 7 bit resolution, we find a digital value for 3.14 of (3.14/0.03125) rounded, which is (100.48) rounded down to 100. Then, the quantization error is 0.48 * 0.03125 = 0.015Volts.
+B)1)With a 4 bit resolution, we find a digital value for 2.718 of (2.718/0.25) rounded, which is (10.872) rounded up to 11. Then, our error is 11-10.872 * 0.25= 0.032Volts.
+B)2)With a 7 bit resolution, we find a digital value for 2.718 of (2.718/0.03125) rounded, which is (86.976) rounded up to 87. Then, the quantization error is 0.024 * 0.03125 = 0.00075Volts.
