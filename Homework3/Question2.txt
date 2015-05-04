@@ -6,14 +6,8 @@ the change can always be detected) if the ADC uses (1) 4-bits of resolution; (2)
 resolution.
 (b) For an input voltage of 3.14V, identify the quantization error if the ADC uses (1) 4-bits of
 resolution; (2) 7-bits of resolution.
-(c) Assume the A/D converter supplies samples at 40 kHz. When a sample arrives, an interrupt
-handler will be invoked to process the sample and feed the result to the application. The ADC
-ISR executes 150 instructions to process each sample for the application. The processor is
-40MHz, and executes one instruction per cycle. Assuming the processor is running only the
-application and interrupt handler, how many application instructions can be executed between
-two consecutive interrupts?
+
 A)1) Assuming we have a 4 bit resolution, we can calculate the smallest detectable change from 4V/2^4, which is 4V/16 = 0.25V
 A)2)Assuming we have a 7 bit resolution, we  can calculate the smallest detectable change from 4V/2^7, which is 4V/128 = 0.03125V
 B)1)With a 4 bit resolution, we find a digital value for 3.14 of (3.14/0.25) rounded, which is (12.56) rounded up to 13. Then, our error is 13-12.55 * 0.25= 0.11Volts.
 B)2)With a 7 bit resolution, we find a digital value for 3.14 of (3.14/0.03125) rounded, which is (100.48) rounded down to 100. Then, the quantization error is 0.48 * 0.03125 = 0.015Volts.
-C)1)Given a frequency of 40kHz, and a processor frequency of 40MHz, we know know the ISR is occuring 1000 times per second from 40MHz/40KHz = 1000. Thus, between every ISR, 1000 instructions occur on the CPU. Given that an ISR requires 150 instructions for execution, then we know that (1000-150)=850 instructions can occur in the application between consecutive interrupts
