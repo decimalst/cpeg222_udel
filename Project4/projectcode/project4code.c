@@ -7,8 +7,7 @@
 #include <p32xxxx.h>
 #include <plib.h>
 #include <stdlib.h>
-#include "dsplib_dsp.h"
-#include "fftc.h"
+
 
 /* SYSCLK = 8MHz Crystal/ FPLLIDIV * FPLLMUL/ FPLLODIV = 80MHz
 PBCLK = SYSCLK /FPBDIV = =10MHz*/
@@ -50,7 +49,30 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 
 //Variable declarations
 
+//State variables
+int mode=1; //Mode 1=idle, mode 2=movement, mode3=victory/reset
+
+
+//Used for average noise level
+int noiseAverage = 400;
+int noiseAverageArray[50];
+int noiseArrayIndex = 0;
+
+
 //Functions definitions
+
+void noiseAverager()
+{
+    /* Calculates the new average noise level when the noiseAverageArray */
+    /* is full of new samples. */
+    /* Should be called every 20th interrupt. */
+    int newAvg=0;
+    for(int i=0; i<50; i++)
+    {
+        newAvg+=noiseAverageArray[i];
+    }
+    noiseAverage=(newAvg/50);
+}
 
 //ISR definitions
 
@@ -58,6 +80,16 @@ void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
 	//This timer occurs at a 80Hz frequency, and should be used to flip the SSD
 	//side display.
     IFS0CLR = 0x100000; // Clear Timer5 interrupt status flag (bit 20)
+}
+
+void __ISR(_OUTPUT_COMPARE_1_VECTOR, ipl7) OC1_IntHandler(void) {
+    // insert user code here
+    IFS0CLR = 0x0040; // Clear the OC1 interrupt flag
+}
+
+void __ISR(_OUTPUT_COMPARE_2_VECTOR, ipl7) OC2_IntHandler(void) {
+    // insert user code here
+    IFS0CLR = 0x0040; // Clear the OC1 interrupt flag
 }
 
 //main function call
@@ -107,6 +139,7 @@ main()
 
     
     //Code taken from pg 575 of reference manual for output compare
+    //Use for left servo
     OC1CON = 0x0000; //Turn off OC1 while doing setup
     OC1R = 0xEA5; //Initialize primary compare register
     OC1RS = 0xEA5; //Initialize secondary compare register
@@ -121,12 +154,53 @@ main()
     T2CONSET = 0x8020; //Enable timer 2
     OC1CONSET = 0x8000; //Enable OC1
 
+    //Code taken from pg 575 of reference manual for output compare
+    //Use for right servo
+    OC2CON = 0x0000; //Turn off OC1 while doing setup
+    OC2R = 0xEA5; //Initialize primary compare register
+    OC2RS = 0xEA5; //Initialize secondary compare register
+    OC2CON = 0x0006; //Configure for PWM mode
+    PR2 = 0xC34F; //Set period
+
+    IFS0CLR = 0x00000800; //OC2 interrupt flag is bit 10
+    IEC0SET = 0x00000800; //Enable the OC1 interrupt on bit 10
+    IPC2SET = 0x001C0000; //OC2 priority is bits18-20
+    IPC2SET = 0x00030000; //OC2 priority is bits16-17
+    //Left out the timer 2 con part here, since they both can
+    //use it, no need to configure twice.
+    OC2CONSET = 0x8000; //Enable OC1
+
     INTEnableSystemMultiVectoredInt();
 
     while (1) 
     {
+        /* Current state logic */
+        switch(mode) 
+        {
+            case 2:
+            //In mode 2, we move the robot and light LEDS according to sensors
+                break;
+            case 1:
+            //In mode 1, we do nothing
+                break;
+            case 3:
+            //In mode 3, we do nothing
+                break;
+        }
 
-
+        /* Next state logic */
+        switch(mode) 
+        {
+            case 2:
+            //In mode 2, we change the servo duty cycles depending on sensors
+                break;
+            case 1:
+            //In mode 1, we check for noise, or button press
+                break;
+            case 3:
+            //In mode 3, check for a button to reset the robot.
+                break;
+        }
 
 
 
