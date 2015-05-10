@@ -47,10 +47,22 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 #define Servo3 LATDbits.LATD8
 #define Servo4 LATEbits.LATE9
 
+#define modeStraight    1
+#define modeLeft        2
+#define modeRight       3
+// The counter speed
+#define DEBOUNCE_TIME 200
+
 //Variable declarations
 
 //State variables
-int mode=1; //Mode 1=idle, mode 2=movement, mode3=victory/reset
+int mode = 2; //Mode 1=idle, mode 2=movement, mode3=victory/reset
+
+int modeMoving = modeStraight;
+
+unsigned short button1Lock = 0;
+unsigned short button2Lock = 0;
+int i;
 
 
 //Used for average noise level
@@ -61,24 +73,23 @@ int noiseArrayIndex = 0;
 
 //Functions definitions
 
-void noiseAverager()
-{
+void noiseAverager() {
     /* Calculates the new average noise level when the noiseAverageArray */
     /* is full of new samples. */
     /* Should be called every 20th interrupt. */
-    int newAvg=0;
-    for(int i=0; i<50; i++)
-    {
-        newAvg+=noiseAverageArray[i];
+    int newAvg = 0;
+    int i;
+    for (i = 0; i < 50; i++) {
+        newAvg += noiseAverageArray[i];
     }
-    noiseAverage=(newAvg/50);
+    noiseAverage = (newAvg / 50);
 }
 
 //ISR definitions
 
 void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
-	//This timer occurs at a 80Hz frequency, and should be used to flip the SSD
-	//side display.
+    //This timer occurs at a 80Hz frequency, and should be used to flip the SSD
+    //side display.
     IFS0CLR = 0x100000; // Clear Timer5 interrupt status flag (bit 20)
 }
 
@@ -94,15 +105,14 @@ void __ISR(_OUTPUT_COMPARE_2_VECTOR, ipl7) OC2_IntHandler(void) {
 
 //main function call
 
-main() 
-{
-	INTDisableInterrupts();
+main() {
+    INTDisableInterrupts();
 
-	//Set onboard buttons to inputs
-	TRISA = 0xC0; //Btn1, Btn2 are input.
+    //Set onboard buttons to inputs
+    TRISA = 0xC0; //Btn1, Btn2 are input.
 
-	//Set microphone input pin to analog.
-	TRISB = 0x80F;
+    //Set microphone input pin to analog.
+    TRISB = 0x80F;
 
     //ADC manual config
     AD1PCFG = 0xF7FF; // all PORTB = digital but RB11 = analog
@@ -137,22 +147,22 @@ main()
     T5CONbits.ON = 1; // Timer 5 module is enabled
     IEC0bits.T5IE = 1; //enable Timer 5
 
-    
+
     //Code taken from pg 575 of reference manual for output compare
     //Use for left servo
-    OC1CON = 0x0000; //Turn off OC1 while doing setup
-    OC1R = 0xEA5; //Initialize primary compare register
-    OC1RS = 0xEA5; //Initialize secondary compare register
-    OC1CON = 0x0006; //Configure for PWM mode
+    OC3CON = 0x0000; //Turn off OC1 while doing setup
+    OC3R = 0xEA5; //Initialize primary compare register
+    OC3RS = 0xEA5; //Initialize secondary compare register
+    OC3CON = 0x0006; //Configure for PWM mode
     PR2 = 0xC34F; //Set period
 
-    IFS0CLR = 0x00000040; //clear the OC1 interrupt flag
-    IEC0SET = 0x00000040; //Enable the OC1 interrupt
-    IPC1SET = 0x001C0000; //Set priority to 7,
-    IPC1SET = 0x00030000; //Set subpriority to 3
+    IFS0CLR = 0x00004000; //clear the OC1 interrupt flag
+    IEC0SET = 0x00004000; //Enable the OC1 interrupt
+    IPC3SET = 0x001C0000; //Set priority to 7,
+    IPC3SET = 0x00030000; //Set subpriority to 3
 
     T2CONSET = 0x8020; //Enable timer 2
-    OC1CONSET = 0x8000; //Enable OC1
+    OC3CONSET = 0x8000; //Enable OC1
 
     //Code taken from pg 575 of reference manual for output compare
     //Use for right servo
@@ -172,33 +182,69 @@ main()
 
     INTEnableSystemMultiVectoredInt();
 
-    while (1) 
-    {
+    while (1) {
         /* Current state logic */
-        switch(mode) 
-        {
+        switch (mode) {
             case 2:
-            //In mode 2, we move the robot and light LEDS according to sensors
+                //In mode 2, we move the robot and light LEDS according to sensors
+                if (modeMoving == modeStraight) {
+                    OC2RS = 0x9C3;
+                    OC3RS = 0x1387;
+                } else if (modeMoving == modeRight) {
+                    OC2RS = 0xEA5;
+                    OC3RS = 0x1387;
+                } else if (modeMoving == modeLeft) {
+                    OC2RS = 0x9C3;
+                    OC3RS = 0xEA5;
+                }
+                /* Next State Logic */
+                //ignore press if not at place where it matters
+
+                if ((Btn1) && !button1Lock) { // Check button status
+                    button1Lock = 1;
+                    mode = modeRight;
+                }
+
+                if ((Btn2) && !button2Lock) { // Check button status
+                    button2Lock = 1;
+                    mode = modeLeft;
+
+
+                } else if (!(Btn1) && button1Lock) { // Check button status
+                    for (i = 0; i < DEBOUNCE_TIME; i++);
+                    button1Lock = 0; // stop multiple presses
+                    modeMoving = modeStraight;
+                } else if (!(Btn2) && button2Lock) { // Check button status
+                    for (i = 0; i < DEBOUNCE_TIME; i++);
+                    button2Lock = 0; // stop multiple presses
+                    modeMoving = modeStraight;
+                }
+
+
+
+
+
+
                 break;
             case 1:
-            //In mode 1, we do nothing
+                //In mode 1, we do nothing
                 break;
             case 3:
-            //In mode 3, we do nothing
+                //In mode 3, we do nothing
                 break;
         }
 
         /* Next state logic */
-        switch(mode) 
-        {
+        switch (mode) {
             case 2:
-            //In mode 2, we change the servo duty cycles depending on sensors
+                //In mode 2, we change the servo duty cycles depending on sensors
+
                 break;
             case 1:
-            //In mode 1, we check for noise, or button press
+                //In mode 1, we check for noise, or button press
                 break;
             case 3:
-            //In mode 3, check for a button to reset the robot.
+                //In mode 3, check for a button to reset the robot.
                 break;
         }
 
