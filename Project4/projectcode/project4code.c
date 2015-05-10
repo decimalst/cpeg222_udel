@@ -41,11 +41,12 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 // Display selection. 0 = right, 1 = left (Cathode)
 #define DispSel_R LATGbits.LATG6
 
-//Servos
-#define Servo1 LATEbits.LATE8
-#define Servo2 LATDbits.LATD0
-#define Servo3 LATDbits.LATD8
-#define Servo4 LATEbits.LATE9
+
+//Light Sensors Top of JC
+#define LS1 PORTGbits.RG12
+#define LS2 PORTGbits.RG13
+#define LS3 PORTGbits.RG14
+#define LS4 PORTGbits.RG15
 
 #define modeStraight    1
 #define modeLeft        2
@@ -112,7 +113,7 @@ main() {
     TRISA = 0xC0; //Btn1, Btn2 are input.
 
     //Set microphone input pin to analog.
-    TRISB = 0x80F;
+    TRISB = 0x08F0;
 
     //ADC manual config
     AD1PCFG = 0xF7FF; // all PORTB = digital but RB11 = analog
@@ -124,11 +125,12 @@ main() {
     AD1CON1bits.ADON = 1; // turn on the ADC
 
     //Port C-G are output ports
+    //Light sensors are inputs
     TRISC = 0;
     TRISD = 0;
     TRISE = 0;
     TRISF = 0;
-    TRISG = 0;
+    TRISG = 0xF000;
     // initialize C~G to 0
     PORTB = 0x00;
     PORTC = 0x00;
@@ -186,6 +188,12 @@ main() {
         /* Current state logic */
         switch (mode) {
             case 2:
+                //Check Light Sensors
+                Led1 = LS1;
+                Led2 = LS2;
+                Led3 = LS3;
+                Led4 = LS4;
+
                 //In mode 2, we move the robot and light LEDS according to sensors
                 if (modeMoving == modeStraight) {
                     OC2RS = 0x9C3;
