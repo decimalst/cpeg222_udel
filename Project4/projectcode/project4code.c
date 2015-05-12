@@ -14,9 +14,13 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 #pragma config FPLLMUL = MUL_20, FPLLIDIV = DIV_2, FPLLODIV = DIV_1, FWDTEN = OFF
 #pragma config POSCMOD = HS, FNOSC = PRIPLL, FPBDIV = DIV_8
 
-#define idleDutyCycleValue	0xEA5
-#define rightDutyCycleValue	0x9C3
-#define leftDutyCycleValue	0x1387
+#define idleDutyCycleValueRight	0xE9C
+#define rightDutyCycleValueRight	0x9C3
+#define leftDutyCycleValueRight	0x1387
+
+#define idleDutyCycleValueLeft 0xEA0
+#define rightDutyCycleValueLeft    0x9C3
+#define leftDutyCycleValueLeft	0x1387
 
 // Define ports used
 //Onboard buttons
@@ -43,10 +47,13 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 
 
 //Light Sensors Top of JC
-#define LS1 PORTGbits.RG12
-#define LS2 PORTGbits.RG13
-#define LS3 PORTGbits.RG14
-#define LS4 PORTGbits.RG15
+#define LS1Left PORTGbits.RG12
+#define LS2CenterLeft PORTGbits.RG13
+#define LS3CenterRight PORTGbits.RG14
+#define LS4Right PORTGbits.RG15
+
+#define leftServoPWM OC3RS
+#define rightServoPWM OC2RS
 
 #define modeStraight    1
 #define modeLeft        2
@@ -57,7 +64,7 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 //Variable declarations
 
 //State variables
-int mode = 2; //Mode 1=idle, mode 2=movement, mode3=victory/reset
+int mode = 1; //Mode 1=idle, mode 2=movement, mode3=victory/reset
 
 int modeMoving = modeStraight;
 
@@ -65,43 +72,126 @@ unsigned short button1Lock = 0;
 unsigned short button2Lock = 0;
 int i;
 
+//Used for SSD display
+int SSDleft = 1;
+int counter = 0;
+int distanceTravelled = 0;
+int timeMoved = 0;
 
 //Used for average noise level
-int noiseAverage = 400;
-int noiseAverageArray[50];
-int noiseArrayIndex = 0;
+int wtf = 0;
+int temp = 0;
+int noiseAverage = 700;
+int noiseAverageTemp = 0;
+int noiseIndex = 0;
+
+//Used for SSD display
+unsigned char SSD_number[] = {
+    0b0111111, //0 -
+    0b0000110, //1
+    0b1011011, //2
+    0b1001111, //3
+    0b1100110, //4
+    0b1101101, //5
+    0b1111101, //6
+    0b0000111, //7
+    0b1111111, //8
+    0b1101111, //9
+    0b1110111, //A -10
+    0b1111100, //B -11
+    0b0111001, //C -12
+    0b1011110, //D -13
+    0b1111001, //E -14
+    0b1110001, //F -15
+    0b0000000 //clear -16
+};
 
 
 //Functions definitions
 
-void noiseAverager() {
-    /* Calculates the new average noise level when the noiseAverageArray */
-    /* is full of new samples. */
-    /* Should be called every 20th interrupt. */
-    int newAvg = 0;
-    int i;
-    for (i = 0; i < 50; i++) {
-        newAvg += noiseAverageArray[i];
+int readADC() {
+    AD1CON1bits.SAMP = 1; // 1. start sampling
+    for (TMR1 = 0; TMR1 < 100; TMR1++); //2. wait for sampling time
+    AD1CON1bits.SAMP = 0; // 3. start the conversion
+    while (!AD1CON1bits.DONE); // 4. wait conversion complete
+    return ADC1BUF0; // 5. read result
+
+}
+
+void displayDigit(unsigned char value, unsigned int leftdisp) {
+    //For left=1, display on left SSD, else, on right SSD
+    if (leftdisp == 1) {
+        SegA_R = value & 1;
+        SegB_R = (value >> 1) & 1;
+        SegC_R = (value >> 2) & 1;
+        SegD_R = (value >> 3) & 1;
+        SegE_R = (value >> 4) & 1;
+        SegF_R = (value >> 5) & 1;
+        SegG_R = (value >> 6) & 1;
+        DispSel_R = 0;
+    } else {
+        SegA_R = value & 1;
+        SegB_R = (value >> 1) & 1;
+        SegC_R = (value >> 2) & 1;
+        SegD_R = (value >> 3) & 1;
+        SegE_R = (value >> 4) & 1;
+        SegF_R = (value >> 5) & 1;
+        SegG_R = (value >> 6) & 1;
+        DispSel_R = 1;
     }
-    noiseAverage = (newAvg / 50);
+}
+
+void showNumber(int digit) {
+    if (SSDleft) {
+        displayDigit(SSD_number[digit % 10], 1);
+    } else {
+        displayDigit(SSD_number[digit / 10], SSDleft);
+    }
+
+
+}
+
+void clearSSDS() {
+    displayDigit(0b0000000, 0);
+    displayDigit(0b0000000, 1);
 }
 
 //ISR definitions
 
-void __ISR(_TIMER_5_VECTOR, ipl5) _T5Interrupt(void) {
+void __ISR(_TIMER_5_VECTOR, ipl4) _T5Interrupt(void) {
     //This timer occurs at a 80Hz frequency, and should be used to flip the SSD
     //side display.
+    SSDleft = !(SSDleft);
     IFS0CLR = 0x100000; // Clear Timer5 interrupt status flag (bit 20)
 }
 
-void __ISR(_OUTPUT_COMPARE_1_VECTOR, ipl7) OC1_IntHandler(void) {
-    // insert user code here
-    IFS0CLR = 0x0040; // Clear the OC1 interrupt flag
+void __ISR(_TIMER_4_VECTOR, ipl5) _T4Interrupt(void) {
+    //This timer occurs at a 30Hz frequency, and should be used to sample ADC
+    //and add to average.
+    temp = readADC();
+    noiseAverageTemp += temp;
+    noiseIndex++;
+    if (noiseIndex % 30 == 0) {
+        counter++;
+    }
+    if (noiseIndex == 150) {
+        noiseAverage = 40 + (noiseAverageTemp / 150);
+        noiseIndex = 0;
+        noiseAverageTemp = 0;
+    }
+
+    IFS0bits.T4IF = 0; // Clear Timer5 interrupt status flag (bit 20)
 }
 
 void __ISR(_OUTPUT_COMPARE_2_VECTOR, ipl7) OC2_IntHandler(void) {
     // insert user code here
-    IFS0CLR = 0x0040; // Clear the OC1 interrupt flag
+    IFS0CLR = 0x00000800; // Clear the OC2 interrupt flag
+
+}
+
+void __ISR(_OUTPUT_COMPARE_3_VECTOR, ipl7) OC3_IntHandler(void) {
+    // insert user code here
+    IFS0CLR = 0x00004000; // Clear the OC3 interrupt flag
 }
 
 //main function call
@@ -112,26 +202,27 @@ main() {
     //Set onboard buttons to inputs
     TRISA = 0xC0; //Btn1, Btn2 are input.
 
-    //Set microphone input pin to analog.
-    TRISB = 0x08F0;
+    //Set microphone pin to input.
+    TRISB = 0x000F;
 
     //ADC manual config
-    AD1PCFG = 0xF7FF; // all PORTB = digital but RB11 = analog
+    AD1PCFG = 0xFFFD; // all PORTB = digital but RB11 = analog
     AD1CON1 = 0; // manual conversion sequence control
-    AD1CHS = 0x000B0000; // Connect RB7/AN7 as CH0 input
+    AD1CHS = 0x00010000; // Connect RB7/AN7 as CH0 input
     AD1CSSL = 0; // no scanning required
     AD1CON2 = 0; // use MUXA, AVss/AVdd used as Vref+/-
     AD1CON3 = 0x1F02; // Tad = 128 x Tpb, Sample time = 31 Tad
     AD1CON1bits.ADON = 1; // turn on the ADC
 
     //Port C-G are output ports
-    //Light sensors are inputs
+    //Light sensors are inputs 12-15 on G
     TRISC = 0;
     TRISD = 0;
     TRISE = 0;
     TRISF = 0;
     TRISG = 0xF000;
     // initialize C~G to 0
+    PORTA = 0x00;
     PORTB = 0x00;
     PORTC = 0x00;
     PORTD = 0x00;
@@ -142,35 +233,32 @@ main() {
     //Timer configured for SSD display at 80Hz speed.
     T5CONbits.ON = 0; // Stop timer, clear control registers
     TMR5 = 0; // Timer counter
-    PR5 = 15624; //Timer count amount for interupt to occur - 2048Hz frequency
-    IPC5bits.T5IP = 5; //prioirty 5
+    PR5 = 15624; //Timer count amount for interupt to occur - 80Hz frequency
+    IPC5bits.T5IP = 4; //prioirty 5
+    IPC5bits.T5IS = 1;
     IFS0bits.T5IF = 0; // clear interrupt flag
     T5CONbits.TCKPS = 2; // prescaler of 64, internal clock sourc
     T5CONbits.ON = 1; // Timer 5 module is enabled
     IEC0bits.T5IE = 1; //enable Timer 5
+    //Timer configured for microphone sampling in Mode1. 30Hz frequency
+    //30Hz = 80MHz/(prescale*(PR + 1))
+    T4CONbits.ON = 0; //Stoptimer,
+    TMR4 = 0;
+    PR4 = 41665; // Period 4, for 30Hz event frequency
+    IPC4bits.T4IP = 5;
+    IPC4bits.T4IS = 2;
+    IFS0bits.T4IF = 0;
+    T4CONbits.TCKPS = 2;
+    T4CONbits.ON = 1;
+    IEC0bits.T4IE = 1;
 
 
-    //Code taken from pg 575 of reference manual for output compare
-    //Use for left servo
-    OC3CON = 0x0000; //Turn off OC1 while doing setup
-    OC3R = 0xEA5; //Initialize primary compare register
-    OC3RS = 0xEA5; //Initialize secondary compare register
-    OC3CON = 0x0006; //Configure for PWM mode
-    PR2 = 0xC34F; //Set period
-
-    IFS0CLR = 0x00004000; //clear the OC1 interrupt flag
-    IEC0SET = 0x00004000; //Enable the OC1 interrupt
-    IPC3SET = 0x001C0000; //Set priority to 7,
-    IPC3SET = 0x00030000; //Set subpriority to 3
-
-    T2CONSET = 0x8020; //Enable timer 2
-    OC3CONSET = 0x8000; //Enable OC1
 
     //Code taken from pg 575 of reference manual for output compare
     //Use for right servo
-    OC2CON = 0x0000; //Turn off OC1 while doing setup
-    OC2R = 0xEA5; //Initialize primary compare register
-    OC2RS = 0xEA5; //Initialize secondary compare register
+    OC2CON = 0x0000; //Turn off OC while doing setup
+    OC2R = 0xE9C; //Initialize primary compare register
+    OC2RS = 0xE9C; //Initialize secondary compare register
     OC2CON = 0x0006; //Configure for PWM mode
     PR2 = 0xC34F; //Set period
 
@@ -180,7 +268,28 @@ main() {
     IPC2SET = 0x00030000; //OC2 priority is bits16-17
     //Left out the timer 2 con part here, since they both can
     //use it, no need to configure twice.
+
+
+    //Code taken from pg 575 of reference manual for output compare
+    //Use for left servo
+    //For OC3, the servo turns slightly backwards when idle set to 0xEA5.
+    OC3CON = 0x0000; //Turn off OC3 while doing setup
+    OC3R = 0xEA0; //Initialize primary compare register
+    OC3RS = 0xEA0; //Initialize secondary compare register
+    OC3CON = 0x0006; //Configure for PWM mode
+    PR2 = 0xC34F; //Set period
+
+    IFS0CLR = 0x00004000; //clear the OC3 interrupt flag
+    IEC0SET = 0x00004000; //Enable the OC3 interrupt
+    IPC3SET = 0x001C0000; //Set priority to 7,
+    IPC3SET = 0x00030000; //Set subpriority to 3
+
+    T2CONSET = 0x8020; //Enable timer 2
+
     OC2CONSET = 0x8000; //Enable OC1
+    OC3CONSET = 0x8000; //Enable OC3
+    wtf = readADC();
+
 
     INTEnableSystemMultiVectoredInt();
 
@@ -189,33 +298,60 @@ main() {
         switch (mode) {
             case 2:
                 //Check Light Sensors
-                Led1 = LS1;
-                Led2 = LS2;
-                Led3 = LS3;
-                Led4 = LS4;
+                Led1 = LS1Left;
+                Led2 = LS2CenterLeft;
+                Led3 = LS3CenterRight;
+                Led4 = LS4Right;
+                showNumber(distanceTravelled);
 
                 //In mode 2, we move the robot and light LEDS according to sensors
-                if (modeMoving == modeStraight) {
-                    OC2RS = 0x9C3;
-                    OC3RS = 0x1387;
-                } else if (modeMoving == modeRight) {
-                    OC2RS = 0xEA5;
-                    OC3RS = 0x1387;
-                } else if (modeMoving == modeLeft) {
-                    OC2RS = 0x9C3;
-                    OC3RS = 0xEA5;
+                #define idleDutyCycleValueRight	0xE9C
+#define rightDutyCycleValueRight	0x9C3
+#define leftDutyCycleValueRight	0x1387
+
+#define idleDutyCycleValueLeft 0xEA0
+#define rightDutyCycleValueLeft    0x9C3
+#define leftDutyCycleValueLeft	0x1387
+                if(!(LS1Left) && !(LS2CenterLeft) && !(LS3CenterRight) && !(LS4Right)){
+                    leftServoPWM = idleDutyCycleValueLeft;
+                    rightServoPWM = idleDutyCycleValueRight;
                 }
-                /* Next State Logic */
+                else if (!LS4Right && (LS1Left)) {
+                    rightServoPWM = idleDutyCycleValueRight;
+                    leftServoPWM = leftDutyCycleValueLeft;
+                }
+                else if (!LS1Left && (LS4Right)) {
+                    rightServoPWM = rightDutyCycleValueRight;
+                    leftServoPWM = idleDutyCycleValueLeft;
+                }
+                else if (!LS2CenterLeft && !LS3CenterRight) {
+                    leftServoPWM = leftDutyCycleValueRight;
+                    rightServoPWM = rightDutyCycleValueLeft;
+                }
+                break;
+            case 1:
+                //In mode 1, we do nothing
+                showNumber(noiseAverage /10);
+                break;
+            case 3:
+                //In mode 3, we do nothing
+                break;
+        }
+
+        /* Next state logic */
+        switch (mode) {
+            case 2:
+                //In mode 2, we change the servo duty cycles depending on sensors
                 //ignore press if not at place where it matters
 
                 if ((Btn1) && !button1Lock) { // Check button status
                     button1Lock = 1;
-                    mode = modeRight;
+                    modeMoving = modeRight;
                 }
 
                 if ((Btn2) && !button2Lock) { // Check button status
                     button2Lock = 1;
-                    mode = modeLeft;
+                    modeMoving = modeLeft;
 
 
                 } else if (!(Btn1) && button1Lock) { // Check button status
@@ -227,29 +363,19 @@ main() {
                     button2Lock = 0; // stop multiple presses
                     modeMoving = modeStraight;
                 }
-
-
-
-
-
-
-                break;
-            case 1:
-                //In mode 1, we do nothing
-                break;
-            case 3:
-                //In mode 3, we do nothing
-                break;
-        }
-
-        /* Next state logic */
-        switch (mode) {
-            case 2:
-                //In mode 2, we change the servo duty cycles depending on sensors
-
                 break;
             case 1:
                 //In mode 1, we check for noise, or button press
+                if (Btn1) {
+                    mode = 2;
+                }
+                if (counter > 2) {
+                    if (temp > noiseAverage) {
+                        mode = 2;
+                        T4CONbits.ON = 1;
+                        IEC0bits.T4IE = 1;
+                    }
+                }
                 break;
             case 3:
                 //In mode 3, check for a button to reset the robot.
