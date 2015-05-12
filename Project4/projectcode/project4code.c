@@ -15,12 +15,16 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 #pragma config POSCMOD = HS, FNOSC = PRIPLL, FPBDIV = DIV_8
 
 #define idleDutyCycleValueRight	0xE9C
-#define rightDutyCycleValueRight	0x9C3
-#define leftDutyCycleValueRight	0x1387
+#define hardrightDutyCycleValueRight	0x9C3
+#define hardleftDutyCycleValueRight	0x1387
+#define softrightDutyCycleValueRight    0x9C3
+#define softleftDutyCycleValueRight 0x1387
 
 #define idleDutyCycleValueLeft 0xEA0
-#define rightDutyCycleValueLeft    0x9C3
-#define leftDutyCycleValueLeft	0x1387
+#define hardrightDutyCycleValueLeft    0x9C3
+#define hardleftDutyCycleValueLeft	0x1387
+#define softrightDutyCycleValueLeft    0x9C3
+#define softleftDutyCycleValueLeft  0x1387
 
 // Define ports used
 //Onboard buttons
@@ -306,27 +310,27 @@ main() {
 
                 //In mode 2, we move the robot and light LEDS according to sensors
                 #define idleDutyCycleValueRight	0xE9C
-#define rightDutyCycleValueRight	0x9C3
-#define leftDutyCycleValueRight	0x1387
+#define hardrightDutyCycleValueRight	0x9C3
+#define hardleftDutyCycleValueRight	0x1387
 
 #define idleDutyCycleValueLeft 0xEA0
-#define rightDutyCycleValueLeft    0x9C3
-#define leftDutyCycleValueLeft	0x1387
+#define hardrightDutyCycleValueLeft    0x9C3
+#define hardleftDutyCycleValueLeft	0x1387
                 if(!(LS1Left) && !(LS2CenterLeft) && !(LS3CenterRight) && !(LS4Right)){
                     leftServoPWM = idleDutyCycleValueLeft;
                     rightServoPWM = idleDutyCycleValueRight;
                 }
                 else if (!LS4Right && (LS1Left)) {
                     rightServoPWM = idleDutyCycleValueRight;
-                    leftServoPWM = leftDutyCycleValueLeft;
+                    leftServoPWM = hardleftDutyCycleValueLeft;
                 }
                 else if (!LS1Left && (LS4Right)) {
-                    rightServoPWM = rightDutyCycleValueRight;
+                    rightServoPWM = hardrightDutyCycleValueRight;
                     leftServoPWM = idleDutyCycleValueLeft;
                 }
                 else if (!LS2CenterLeft && !LS3CenterRight) {
-                    leftServoPWM = leftDutyCycleValueRight;
-                    rightServoPWM = rightDutyCycleValueLeft;
+                    leftServoPWM = hardleftDutyCycleValueRight;
+                    rightServoPWM = hardrightDutyCycleValueLeft;
                 }
                 break;
             case 1:
