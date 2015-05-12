@@ -14,17 +14,17 @@ PBCLK = SYSCLK /FPBDIV = =10MHz*/
 #pragma config FPLLMUL = MUL_20, FPLLIDIV = DIV_2, FPLLODIV = DIV_1, FWDTEN = OFF
 #pragma config POSCMOD = HS, FNOSC = PRIPLL, FPBDIV = DIV_8
 
-#define idleDutyCycleValueRight	0xE9C
-#define hardrightDutyCycleValueRight	0x9C3
-#define hardleftDutyCycleValueRight	0x1387
-#define softrightDutyCycleValueRight    0x9C3
-#define softleftDutyCycleValueRight 0x1387
+#define idleDutyCycleValueRight         3742
+#define hardrightDutyCycleValueRight	2499
+#define hardleftDutyCycleValueRight	4999
+#define softrightDutyCycleValueRight    2499
+#define softleftDutyCycleValueRight     4999
 
-#define idleDutyCycleValueLeft 0xEA0
-#define hardrightDutyCycleValueLeft    0x9C3
-#define hardleftDutyCycleValueLeft	0x1387
-#define softrightDutyCycleValueLeft    0x9C3
-#define softleftDutyCycleValueLeft  0x1387
+#define idleDutyCycleValueLeft          3740
+#define hardrightDutyCycleValueLeft     2499
+#define hardleftDutyCycleValueLeft	4999
+#define softrightDutyCycleValueLeft     2499
+#define softleftDutyCycleValueLeft      4999
 
 // Define ports used
 //Onboard buttons
@@ -308,14 +308,6 @@ main() {
                 Led4 = LS4Right;
                 showNumber(distanceTravelled);
 
-                //In mode 2, we move the robot and light LEDS according to sensors
-                #define idleDutyCycleValueRight	0xE9C
-#define hardrightDutyCycleValueRight	0x9C3
-#define hardleftDutyCycleValueRight	0x1387
-
-#define idleDutyCycleValueLeft 0xEA0
-#define hardrightDutyCycleValueLeft    0x9C3
-#define hardleftDutyCycleValueLeft	0x1387
                 if(!(LS1Left) && !(LS2CenterLeft) && !(LS3CenterRight) && !(LS4Right)){
                     leftServoPWM = idleDutyCycleValueLeft;
                     rightServoPWM = idleDutyCycleValueRight;
